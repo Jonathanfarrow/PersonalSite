@@ -46,35 +46,21 @@ export class ContentManager {
 
         try {
             let content;
-            const homeContent = document.querySelector('.content-grid');
-            const heroSection = document.querySelector('.hero');
-            const watercolorImg = document.querySelector('.watercolor-img');
-            const body = document.body;
+            const heroContent = document.querySelector('.hero-content');
+            const mainContent = document.querySelector('main.content');
+            const homeGrid = document.querySelector('.content-grid');
             
             if (!hash || hash === 'home') {
-                // Show home page
-                if (homeContent) homeContent.style.display = 'grid';
-                if (heroSection) heroSection.style.display = 'flex';
-                if (watercolorImg) watercolorImg.style.opacity = '0.9';
-                body.classList.remove('reading-mode');
+                if (heroContent) heroContent.style.display = 'block';
+                if (homeGrid) homeGrid.style.display = 'grid';
+                if (mainContent) mainContent.classList.remove('content-above');
                 content = await this.pages.home.render();
                 this.contentElement.innerHTML = content;
                 await this.pages.home.afterRender();
             } else {
-                // Hide home page sections for other pages
-                if (homeContent) homeContent.style.display = 'none';
-                if (heroSection) heroSection.style.display = 'none';
-                
-                // Adjust watercolor opacity and position based on page type
-                if (watercolorImg) {
-                    if (hash.startsWith('read/')) {
-                        watercolorImg.style.opacity = '0.7';
-                        body.classList.add('reading-mode');
-                    } else {
-                        watercolorImg.style.opacity = '0.4';
-                        body.classList.remove('reading-mode');
-                    }
-                }
+                if (heroContent) heroContent.style.display = 'none';
+                if (homeGrid) homeGrid.style.display = 'none';
+                if (mainContent) mainContent.classList.add('content-above');
                 
                 if (hash.startsWith('read/')) {
                     const [_, section, filename] = hash.split('/');
@@ -140,7 +126,7 @@ export class ContentManager {
         }
 
         return articles.map(article => `
-            <article class="article">
+            <article class="article" onclick="window.location.hash = 'read/${article.type.replace('content/', '')}/${article.path}'">
                 <h3>${article.metadata.title || 'Untitled'}</h3>
                 ${article.metadata.subtitle ? `<p class="subtitle">${article.metadata.subtitle}</p>` : ''}
                 ${article.metadata.tags && article.metadata.tags.length > 0 ? `
@@ -150,10 +136,30 @@ export class ContentManager {
                         `).join('')}
                     </div>
                 ` : ''}
-                <div class="content">
-                    ${article.content}
+                <div class="preview">
+                    ${this.generatePreview(article.content)}
                 </div>
+                ${article.date ? `<div class="date">${this.formatDate(article.date)}</div>` : ''}
             </article>
         `).join('');
+    }
+
+    generatePreview(content) {
+        // Remove HTML tags and get first paragraph or first 200 characters
+        const textContent = content.replace(/<[^>]*>/g, '');
+        const firstParagraph = textContent.split('\n')[0];
+        return firstParagraph.length > 200 ? 
+            firstParagraph.substring(0, 200) + '...' : 
+            firstParagraph;
+    }
+
+    formatDate(dateStr) {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
     }
 } 

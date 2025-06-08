@@ -32,10 +32,11 @@ export class ListingPage {
     }
 
     generatePreview(content) {
-        const plainText = content.replace(/<[^>]*>/g, '');
-        return plainText.length > 150 ? 
-            plainText.substring(0, 150) + '...' : 
-            plainText;
+        // Get first paragraph or first 200 characters of raw markdown
+        const firstParagraph = content.split('\n')[0];
+        return firstParagraph.length > 200 ? 
+            firstParagraph.substring(0, 200) + '...' : 
+            firstParagraph;
     }
 
     formatDate(dateStr) {
