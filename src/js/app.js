@@ -33,10 +33,26 @@ function positionHeroContent() {
     // Get the watercolor image's dimensions and position
     const imgRect = watercolorImg.getBoundingClientRect();
     
+    // Calculate aspect ratio
+    const aspectRatio = imgRect.width / imgRect.height;
+    
+    // Adjust the vertical position based on aspect ratio
+    let topMultiplier = 0.45; // base multiplier
+    
+    // For wider screens, adjust the position higher
+    if (aspectRatio > 1.6) { // wider than 16:10
+        topMultiplier = 0.4;
+    }
+    if (aspectRatio > 1.77) { // wider than 16:9
+        topMultiplier = 0.35;
+    }
+    if (aspectRatio > 2) { // ultra-wide
+        topMultiplier = 0.3;
+    }
+    
     // Calculate the position where the blue section is
-    // These values can be adjusted based on the exact position of the blue section
     const blueSection = {
-        top: imgRect.height * 0.45,  // Adjust this multiplier to match blue section
+        top: imgRect.height * topMultiplier,
         left: imgRect.width * 0.5
     };
     
