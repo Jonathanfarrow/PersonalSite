@@ -24,49 +24,6 @@ class App {
     }
 }
 
-function positionHeroContent() {
-    const watercolorImg = document.querySelector('.watercolor-img');
-    const heroContent = document.querySelector('.hero-content');
-    
-    if (!watercolorImg || !heroContent) return;
-
-    // Get the watercolor image's dimensions and position
-    const imgRect = watercolorImg.getBoundingClientRect();
-    
-    // Calculate aspect ratio
-    const aspectRatio = imgRect.width / imgRect.height;
-    
-    // Adjust the vertical position based on aspect ratio
-    let topMultiplier = 0.45; // base multiplier
-    
-    // For wider screens, adjust the position higher
-    if (aspectRatio > 1.6) { // wider than 16:10
-        topMultiplier = 0.4;
-    }
-    if (aspectRatio > 1.77) { // wider than 16:9
-        topMultiplier = 0.35;
-    }
-    if (aspectRatio > 2) { // ultra-wide
-        topMultiplier = 0.3;
-    }
-    
-    // Calculate the position where the blue section is
-    const blueSection = {
-        top: imgRect.height * topMultiplier,
-        left: imgRect.width * 0.5
-    };
-    
-    // Position the hero content relative to the blue section
-    heroContent.style.position = 'absolute';
-    heroContent.style.top = `${blueSection.top}px`;
-    heroContent.style.left = '50%';
-    heroContent.style.transform = 'translate(-50%, -50%)';
-}
-
-// Call on load and resize
-window.addEventListener('load', positionHeroContent);
-window.addEventListener('resize', positionHeroContent);
-
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', () => {
     new App();
