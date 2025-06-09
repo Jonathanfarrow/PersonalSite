@@ -1,6 +1,9 @@
+
+---
 title: primer on recursion
 subtitle: a look into how recursion work 
 tags: #javascriprs #computerscience
+---
 
 ## Introduction 
 Recursion can be a topic that people hear about and not fully understand or fall into some pitfalls when trying to implement. What I would like to to do is distil some information about recursion that might help further some peoples understanding. 
