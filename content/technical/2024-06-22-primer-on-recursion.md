@@ -1,8 +1,7 @@
-
 ---
-title: primer on recursion
-subtitle: a look into how recursion work 
-tags: #javascriprs #computerscience
+title: ## primer on recursion
+subtitle:  a look into how recursion work  algorithm
+tags:  #javascriprs #computerscience
 ---
 
 ## Introduction 
