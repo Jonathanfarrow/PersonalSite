@@ -5,13 +5,14 @@ tags:  #javascriprs #computerscience
 ---
 
 ## Introduction 
-Recursion can be a topic that people hear about and not fully understand or fall into some pitfalls when trying to implement. What I would like to to do is distil some information about recursion that might help further some peoples understanding. 
+Recursion is a concept that many people hear about but often struggle to understand or implement correctly. 
+I'd like to distill some information about recursion to help deepen people's understanding
 
 ## Recursion
 
-Recursion is when a function calls itself with in its body -self invoking. 
+Recursion occurs when a function calls itself within its own body. This is known as self-invocation. 
 
-The example bellow shows the exampleRecursion function calling itself and passing in the new value n. The problem with this function is it will keep calling itself indefinitely until it runs out of stack frames leading to a stack overflow error.
+The example below shows the exampleRecursion function calling itself. The problem with this function is it will keep calling itself indefinitely until it runs out of stack frames leading to a stack overflow error.
 
 
 
