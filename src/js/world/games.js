@@ -1,11 +1,12 @@
 // Ground floor: the games room. Each arcade cabinet is one game.
 import * as THREE from 'three';
-import { box, cyl, ball, group, canvasTex, screen, neonText, rng, pick, hotspot, imageTex, fabric, liveScreen, DISPLAY_FONT } from './kit.js';
+import { box, cyl, ball, group, planks, canvasTex, screen, neonText, rng, pick, hotspot, imageTex, fabric, liveScreen, DISPLAY_FONT } from './kit.js';
+import { prop } from './props.js';
 
 export const GAMES_LOOK = {
-    wall: 0x2c2568, dado: 0x1b1746, floor: 0x1a1730, trim: 0x14112e, light: 0xc4b5ff, accent: 0xff5db1,
-    accentAt: [-2.2, 1.6, 0.2], spot: 44, fill: 7, accentPower: 14,
-    floorMaterial: checkerFloorMaterial,
+    wall: 0x34466a, dado: 0x26344f, floor: 0x6b4a34, trim: 0xe9dfcf, light: 0xffcf9a, accent: 0xff8a5c, shade: 0xc9694f,
+    accentAt: [-2.4, 1.6, 0.2], spot: 42, fill: 6, accentPower: 7, fireplace: true, mantel: 0x4a3324,
+    floorMaterial: () => planks(0x7a563c, 0x4f3625, 2, 2),
 };
 
 const CAB_COLORS = [
@@ -14,22 +15,6 @@ const CAB_COLORS = [
     { body: 0x14504f, side: '#5ef2d6', glow: '#ffd166' },
     { body: 0x4a2a7a, side: '#ff9f6b', glow: '#ff5db1' },
 ];
-
-function checkerFloorMaterial() {
-    const tex = canvasTex(256, 256, (ctx, w) => {
-        const n = 8;
-        const s = w / n;
-        for (let y = 0; y < n; y++) {
-            for (let x = 0; x < n; x++) {
-                ctx.fillStyle = (x + y) % 2 ? '#2a2550' : '#181530';
-                ctx.fillRect(x * s, y * s, s, s);
-            }
-        }
-    });
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(2, 1.25);
-    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.28, metalness: 0.1 });
-}
 
 /** A little mirrored pixel creature, unique per game title. */
 function drawSprite(ctx, rand, cx, cy, cell, color) {
@@ -162,18 +147,6 @@ export function buildGames(parent, data) {
     const spots = [];
     const games = data.games ?? [];
 
-    // LED strips
-    const pink = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff5db1).multiplyScalar(2.4), toneMapped: false });
-    const cyan = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x5ef2d6).multiplyScalar(2.2), toneMapped: false });
-    const top = new THREE.Mesh(new THREE.BoxGeometry(7.9, 0.035, 0.035), pink);
-    top.position.set(0, 2.86, -2.44);
-    g.add(top);
-    for (const x of [-3.96, 3.96]) {
-        const s = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 4.9), cyan);
-        s.position.set(x, 0.06, 0);
-        g.add(s);
-    }
-
     // Arcade row
     const shown = games.slice(0, 4);
     const screens = [];
@@ -189,7 +162,7 @@ export function buildGames(parent, data) {
     box(1.9, 1.08, 0.06, 0x0d0c18, { at: [tvX, 1.15, -2.42], parent: g, r: 0.02 });
     screen(1.8, 0.98, tvTexture(), { at: [tvX, 1.69, -2.385], parent: g, brightness: 1.5 });
     const unit = group(g, [tvX, 0, -2.15]);
-    box(2.2, 0.42, 0.5, 0x2b2a6b, { at: [0, 0.1, 0], parent: unit, r: 0.02 });
+    box(2.2, 0.42, 0.5, 0x5a3826, { at: [0, 0.1, 0], parent: unit, r: 0.02 });
     for (const x of [-1.0, 1.0]) cyl(0.03, 0.02, 0.1, 0x0d0c18, { at: [x, 0, 0.15], parent: unit, seg: 8 });
     box(0.5, 0.07, 0.34, 0xe9dfcf, { at: [-0.55, 0.52, 0], parent: unit, r: 0.015 });
     box(0.06, 0.01, 0.01, 0x5ef2d6, { at: [-0.55, 0.545, 0.172], parent: unit, emissive: 0x5ef2d6, glow: 2 });
@@ -199,31 +172,28 @@ export function buildGames(parent, data) {
         box(0.3 + rand() * 0.1, 0.055, 0.28, pick(rand, [0xff5db1, 0x5ef2d6, 0xffd166, 0xff9f6b]), { at: [0.15, 0.52 + i * 0.056, 0], parent: unit, ry: (rand() - 0.5) * 0.3 });
     }
 
-    // Sofa, beanbag, controllers
-    const sofa = group(g, [3.35, 0, 0.35], -Math.PI / 2);
-    box(2.0, 0.34, 0.85, 0, { at: [0, 0.1, 0], parent: sofa, r: 0.08, material: fabric(0x6a3fb0) });
-    box(2.0, 0.62, 0.24, 0, { at: [0, 0.3, -0.33], parent: sofa, r: 0.08, material: fabric(0x6a3fb0) });
-    for (const x of [-0.94, 0.94]) box(0.2, 0.4, 0.85, 0, { at: [x, 0.26, 0], parent: sofa, r: 0.08, material: fabric(0x5a349a) });
-    box(0.4, 0.34, 0.12, 0xff5db1, { at: [-0.5, 0.48, -0.15], parent: sofa, r: 0.05, rx: -0.3 });
-    box(0.4, 0.34, 0.12, 0x5ef2d6, { at: [0.45, 0.48, -0.15], parent: sofa, r: 0.05, rx: -0.3 });
-    ball(0.5, 0xff9f6b, { at: [1.55, 0.3, 0.75], parent: g, scale: [1, 0.62, 1] });
-    ball(0.3, 0xff9f6b, { at: [1.55, 0.56, 0.6], parent: g, scale: [1, 0.6, 1] });
-    for (const [x, z, ry, col] of [[2.2, 0.9, 0.4, 0xe9dfcf], [2.6, 1.3, -0.7, 0x15141b]]) {
-        const pad = group(g, [x, 0, z], ry);
+    // Sofa facing the TV, beanbag, controllers
+    if (!prop('sofa', { at: [1.6, 0, 1.45], ry: Math.PI, parent: g, colors: { fabric: 0xc98f3a } })) {
+        box(2.0, 0.75, 0.85, 0, { at: [1.6, 0.1, 1.45], parent: g, r: 0.1, material: fabric(0xc98f3a) });
+    }
+    if (!prop('beanbag', { at: [3.0, 0, -0.75], ry: 0.6, parent: g, colors: { fabric: 0xb5543a } })) {
+        ball(0.5, 0xb5543a, { at: [3.0, 0.3, -0.75], parent: g, scale: [1, 0.62, 1] });
+    }
+    for (const [x, z, ry, col] of [[1.75, 0.2, 0.4, 0xe9dfcf], [1.35, 0.05, -0.7, 0x15141b]]) {
+        const pad = group(g, [x, 0.36, z], ry);
         box(0.26, 0.05, 0.13, col, { at: [0, 0, 0], parent: pad, r: 0.025 });
         for (const px of [-0.1, 0.1]) box(0.07, 0.05, 0.14, col, { at: [px, 0, 0.05], parent: pad, r: 0.025 });
     }
     // low table
-    cyl(0.45, 0.45, 0.04, 0x0d0c18, { at: [2.1, 0.32, -0.6], parent: g, seg: 32 });
-    cyl(0.04, 0.2, 0.32, 0x0d0c18, { at: [2.1, 0, -0.6], parent: g });
-    cyl(0.045, 0.04, 0.12, 0xff5db1, { at: [2.0, 0.36, -0.55], parent: g });
-    cyl(0.045, 0.04, 0.12, 0x5ef2d6, { at: [2.25, 0.36, -0.7], parent: g });
+    box(1.1, 0.05, 0.6, 0x6f482c, { at: [1.6, 0.31, 0.15], parent: g, r: 0.02 });
+    for (const [x, z] of [[1.12, -0.08], [2.08, -0.08], [1.12, 0.38], [2.08, 0.38]]) cyl(0.025, 0.02, 0.31, 0x3a2418, { at: [x, 0, z], parent: g, seg: 8 });
+    cyl(0.045, 0.04, 0.12, 0xc9694f, { at: [2.0, 0.36, 0.3], parent: g });
 
     // Rug under the lounge, shelf of collectibles, framed pixel art
-    cyl(1.35, 1.35, 0.02, 0, { at: [2.0, 0, 0.2], parent: g, shadow: false, seg: 48, material: fabric(0x3a2f8a) }).receiveShadow = true;
-    cyl(1.0, 1.0, 0.022, 0, { at: [2.0, 0, 0.2], parent: g, shadow: false, seg: 48, material: fabric(0xff5db1) }).receiveShadow = true;
-    cyl(0.62, 0.62, 0.024, 0, { at: [2.0, 0, 0.2], parent: g, shadow: false, seg: 48, material: fabric(0x3a2f8a) }).receiveShadow = true;
-    box(1.5, 0.04, 0.2, 0x14112e, { at: [0.55, 1.75, -2.38], parent: g });
+    box(3.0, 0.02, 2.3, 0, { at: [1.6, 0, 0.4], parent: g, shadow: false, material: fabric(0x7a2f2a) }).receiveShadow = true;
+    box(2.6, 0.022, 1.9, 0, { at: [1.6, 0, 0.4], parent: g, shadow: false, material: fabric(0xe2c08a) }).receiveShadow = true;
+    box(2.3, 0.024, 1.6, 0, { at: [1.6, 0, 0.4], parent: g, shadow: false, material: fabric(0x2f4a6a) }).receiveShadow = true;
+    box(1.5, 0.04, 0.2, 0x6f482c, { at: [0.55, 1.75, -2.38], parent: g });
     const toys = rng('toys');
     for (let i = 0; i < 6; i++) {
         const col = pick(toys, [0xff5db1, 0x5ef2d6, 0xffd166, 0xff9f6b, 0xc4b5ff]);

@@ -79,18 +79,23 @@ export class Panel {
         return this.head('studio') + `
             <ol class="items tracks">
                 ${tracks.map((t, i) => `
-                    <li class="item track" data-item="${i}">
-                        <a class="sleeve sleeve-${i % 6}" href="#studio/${i}" aria-label="Select ${esc(t.title)}">
+                    <li class="item track${t.spotify ? ' has-embed' : ''}" data-item="${i}">
+                        <a class="sleeve ${t.sleeve === 'mono' ? 'sleeve-mono' : `sleeve-${i % 6}`}" href="#studio/${i}" aria-label="Select ${esc(t.title)}">
                             ${t.cover ? `<img src="${safeUrl(t.cover)}" alt="">` : ''}
                         </a>
                         <div class="item-main">
                             <h3>${esc(t.title)}</h3>
-                            ${t.year ? `<p class="meta">${esc(t.year)}</p>` : ''}
+                            ${t.artist || t.year ? `<p class="meta">${[t.artist, t.year].filter(Boolean).map(esc).join(' · ')}</p>` : ''}
                             ${t.note ? `<p>${esc(t.note)}</p>` : ''}
                             ${t.audio ? `<audio controls preload="none" src="${safeUrl(t.audio)}"></audio>` : ''}
-                            ${t.url ? `<a class="btn" href="${safeUrl(t.url)}"${external(t.url)}>Listen</a>` : ''}
-                            ${!t.audio && !t.url ? '<p class="meta">Audio coming soon</p>' : ''}
+                            ${!t.spotify && t.url ? `<a class="btn" href="${safeUrl(t.url)}"${external(t.url)}>Listen</a>` : ''}
+                            ${!t.audio && !t.url && !t.spotify ? '<p class="meta">Audio coming soon</p>' : ''}
                         </div>
+                        ${t.spotify && /^[A-Za-z0-9]+$/.test(t.spotify) ? `
+                            <iframe class="spotify" title="${esc(t.title)} on Spotify" loading="lazy"
+                                src="https://open.spotify.com/embed/track/${t.spotify}?theme=0"
+                                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>
+                            <a class="btn ghost" href="${safeUrl(t.url || `https://open.spotify.com/track/${t.spotify}`)}" target="_blank" rel="noopener">Open in Spotify</a>` : ''}
                     </li>`).join('')}
             </ol>`;
     }

@@ -10,6 +10,7 @@ import { DIM, floorY, buildShell, buildStreet, buildSky } from './building.js';
 import { buildStudio, STUDIO_LOOK } from './studio.js';
 import { buildOffice, OFFICE_LOOK } from './office.js';
 import { buildGames, GAMES_LOOK } from './games.js';
+import { prop } from './props.js';
 
 // Bottom storey first.
 const ROOMS = [
@@ -88,7 +89,7 @@ export class World {
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         this.scene = new THREE.Scene();
-        this.scene.fog = new THREE.Fog(0x2a2350, 40, 110);
+        this.scene.fog = new THREE.Fog(0x1c2748, 45, 120);
         this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 400);
         this.raycaster = new THREE.Raycaster();
 
@@ -110,17 +111,20 @@ export class World {
 
     build(data) {
         this.tickers.push(buildSky(this.scene).tick);
-        this.tickers.push(buildStreet(this.scene).tick);
-        this.tickers.push(buildShell(this.scene, ROOMS.map((r) => r.look)).tick);
+        this.street = buildStreet(this.scene);
+        this.shell = buildShell(this.scene, ROOMS.map((r) => r.look));
+        this.tickers.push(this.shell.tick);
+        for (const [name, place] of Object.entries(this.street.group.userData.props)) prop(name, { ...place, parent: this.scene });
+        prop('cat', { at: this.shell.group.userData.catSpot, ry: -0.5, parent: this.scene });
 
-        this.scene.add(new THREE.HemisphereLight(0x7f88e8, 0x1c1526, 0.42));
-        // Cool moonlight from the front-left; the rooms' own lamps are warm against it.
-        const moon = new THREE.DirectionalLight(0x9db2ff, 0.85);
-        moon.position.set(-9, 15, 15);
-        moon.target.position.set(0, 4.5, 0);
+        this.scene.add(new THREE.HemisphereLight(0x8fa3e0, 0x1d1f2a, 0.5));
+        // Cool dusk light from the front-left; the rooms' own lamps are warm against it.
+        const moon = new THREE.DirectionalLight(0xa9bcff, 0.95);
+        moon.position.set(-10, 15, 16);
+        moon.target.position.set(3, 4.5, 0);
         moon.castShadow = true;
-        moon.shadow.mapSize.set(2048, 2048);
-        Object.assign(moon.shadow.camera, { left: -12, right: 12, top: 10, bottom: -9, near: 1, far: 55 });
+        moon.shadow.mapSize.set(4096, 4096);
+        Object.assign(moon.shadow.camera, { left: -16, right: 22, top: 12, bottom: -10, near: 1, far: 60 });
         moon.shadow.bias = -0.0005;
         moon.shadow.normalBias = 0.03;
         moon.shadow.radius = 5;
@@ -134,7 +138,7 @@ export class World {
 
             // Ceiling spot: the pool of light everything in the room sits in.
             const spot = new THREE.SpotLight(def.look.light, 0, 12, 1.2, 1, 1.2);
-            spot.position.set(0.4, y + 2.86, 1.9);
+            spot.position.set(-0.4, y + 2.86, 1.9);
             spot.target.position.set(0, y + 0.6, -1.6);
             spot.castShadow = true;
             spot.shadow.mapSize.set(1024, 1024);
@@ -146,7 +150,7 @@ export class World {
             const fill = new THREE.PointLight(def.look.light, 0, 9, 1.5);
             fill.position.set(0, y + 2.2, 0.2);
             const accent = new THREE.PointLight(def.look.accent, 0, 7.5, 1.5);
-            accent.position.set(...(def.look.accentAt ?? [-2.8, 1.2, 0.4]));
+            accent.position.set(...(def.look.accentAt ?? [2.8, 1.2, 0.4]));
             accent.position.y += y;
             this.scene.add(spot, spot.target, fill, accent);
 
@@ -190,11 +194,13 @@ export class World {
         let target, boxW, boxH, az, el, depth;
         if (room) {
             target = new THREE.Vector3(0, room.y + 1.38, -0.2);
-            boxW = DIM.W + 1.3; boxH = DIM.FLOOR + 0.25; az = 0.2; el = 0.12; depth = DIM.D / 2 + 0.2;
+            boxW = DIM.W + 1.3; boxH = DIM.FLOOR + 0.25; az = -0.2; el = 0.12; depth = DIM.D / 2 + 0.2;
         } else {
-            const topY = floorY(this.rooms.length) + 1.9;
-            target = new THREE.Vector3(0, topY / 2 - 0.3, 0);
-            boxW = DIM.W + 4.6; boxH = topY + 2.2; az = 0.46; el = 0.16; depth = DIM.D / 2;
+            // Wide screens also take in the house next door; narrow ones stay on this one.
+            const wideView = fw / fh > 1.05;
+            const topY = floorY(this.rooms.length) + 2.2;
+            target = new THREE.Vector3(wideView ? 2.6 : 0.5, topY / 2 - 0.3, 0);
+            boxW = DIM.W + (wideView ? 10 : 3.4); boxH = topY + 2.2; az = -0.44; el = 0.15; depth = DIM.D / 2;
         }
         const dist = Math.max((boxH / 2) / (tan * (fh / h)), (boxW / 2) / (tan * (w / h) * (fw / w))) + depth;
         const pos = new THREE.Vector3(
@@ -257,7 +263,7 @@ export class World {
             this.rooms.forEach((r) => { r.powerAt = 0; });
             return;
         }
-        const offset = view.pos.clone().sub(view.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.55).multiplyScalar(1.3);
+        const offset = view.pos.clone().sub(view.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.55).multiplyScalar(1.3);
         offset.y += 7;
         this.cam = { pos: view.target.clone().add(offset), target: view.target.clone().add(new THREE.Vector3(0, 1.2, 0)), ox: view.ox, oy: view.oy };
         this.moveTo(view, 3.4, easeOut);
@@ -267,7 +273,7 @@ export class World {
     /** Screen position (CSS px) of a room's label anchor. */
     labelPosition(roomId) {
         const room = this.rooms.find((r) => r.id === roomId);
-        const p = new THREE.Vector3(-DIM.W / 2 - DIM.WALL, room.y + 1.45, DIM.D / 2).project(this.camera);
+        const p = new THREE.Vector3(-DIM.W / 2 - DIM.WALL, room.y + 1.45, DIM.D / 2 - 0.4).project(this.camera);
         return { x: (p.x * 0.5 + 0.5) * this.size.w, y: (-p.y * 0.5 + 0.5) * this.size.h };
     }
 
@@ -371,7 +377,7 @@ export class World {
         const room = this.rooms.find((r) => r.id === this.current);
         const toUv = (worldY) => new THREE.Vector3(0, worldY, DIM.D / 2).project(this.camera).y * 0.5 + 0.5;
         const lo = toUv(room ? room.y - 0.1 : 0.2);
-        const hi = toUv(room ? room.y + DIM.FLOOR - 0.1 : floorY(this.rooms.length) + 1.6);
+        const hi = toUv(room ? room.y + DIM.FLOOR - 0.1 : floorY(this.rooms.length) + 2.4);
         const half = (hi - lo) / 2 + (room ? 0.02 : 0.06);
         const strength = (room ? 6 : 3) * this.renderer.getPixelRatio();
         const k = 1 - Math.exp(-dt * 5);

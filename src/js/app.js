@@ -47,7 +47,8 @@ async function start() {
     ]);
 
     try {
-        const { World } = await import('./world/World.js');
+        const [{ World }, { loadProps }] = await Promise.all([import('./world/World.js'), import('./world/props.js')]);
+        await loadProps();
         world = new World($('#scene'), {
             studio: site.studio,
             games: site.games,

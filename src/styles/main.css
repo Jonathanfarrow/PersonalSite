@@ -1,9 +1,9 @@
 :root {
-    --bg: #0b0e24;
+    --bg: #0d1326;
     --ink: #f4efe6;
     --muted: #b7b3cc;
     --line: rgba(244, 239, 230, 0.16);
-    --sheet: rgba(15, 17, 42, 0.9);
+    --sheet: rgba(17, 22, 40, 0.92);
     --amber: #ffb45e;
     --accent: var(--amber);
     --display: "Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
@@ -13,9 +13,9 @@
     --bar-h: 56px;
 }
 
-body[data-room="studio"] { --accent: #ff9d6c; }
-body[data-room="office"] { --accent: #5ef2d6; }
-body[data-room="games"] { --accent: #ff7cc0; }
+body[data-room="studio"] { --accent: #f0a070; }
+body[data-room="office"] { --accent: #a9d3ae; }
+body[data-room="games"] { --accent: #f2c078; }
 
 * { box-sizing: border-box; }
 
@@ -105,7 +105,7 @@ a { color: inherit; }
 #stage {
     position: fixed;
     inset: 0;
-    background: linear-gradient(#070a1f, #141a44 45%, #3b2a63 72%, #8a4a6b 90%, #d9805f);
+    background: linear-gradient(#081028, #12204a 45%, #2b3f78 75%, #6a6a9c 90%, #e2a987);
 }
 
 /* keeps the intro readable over the sky */
@@ -113,7 +113,7 @@ a { color: inherit; }
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(90deg, rgba(7, 10, 31, 0.78), rgba(7, 10, 31, 0.35) 30%, transparent 48%);
+    background: linear-gradient(90deg, rgba(8, 14, 34, 0.8), rgba(8, 14, 34, 0.4) 28%, transparent 46%);
     pointer-events: none;
     transition: opacity 0.6s;
 }
@@ -240,9 +240,9 @@ a { color: inherit; }
 
 .is-ready .room-label { opacity: 1; }
 
-.room-label[data-room="studio"] { --c: #ff9d6c; }
-.room-label[data-room="office"] { --c: #5ef2d6; }
-.room-label[data-room="games"] { --c: #ff7cc0; }
+.room-label[data-room="studio"] { --c: #f0a070; }
+.room-label[data-room="office"] { --c: #a9d3ae; }
+.room-label[data-room="games"] { --c: #f2c078; }
 
 .room-label-floor { color: var(--c); }
 
@@ -383,6 +383,16 @@ a { color: inherit; }
 }
 
 .item.game { flex-direction: column; }
+.item.has-embed { flex-wrap: wrap; }
+
+.spotify {
+    flex: 1 0 100%;
+    width: 100%;
+    height: 152px;
+    border: 0;
+    border-radius: 12px;
+    color-scheme: normal;
+}
 
 .item.is-selected {
     background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -434,6 +444,7 @@ a.post:hover h3 { color: var(--accent); }
     object-fit: cover;
 }
 
+.sleeve-mono { background: repeating-linear-gradient(135deg, #0b0b0d 0 9px, #26262a 9px 11px); }
 .sleeve-1 { background: radial-gradient(circle at 60% 40%, #5ef2d6 0 16%, #7b5cff 17% 40%, #10122b 41%); }
 .sleeve-2 { background: linear-gradient(135deg, #f25f8b 0 34%, #ffe3a3 35% 52%, #2a1030 53%); }
 .sleeve-3 { background: radial-gradient(circle at 50% 100%, #ff9f1c 0 30%, #2ec4b6 31% 55%, #0e2233 56%); }

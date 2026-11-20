@@ -1,10 +1,11 @@
 // Middle floor: the office. Desk = work, bookshelf = writing, photo = about.
 import * as THREE from 'three';
 import { box, cyl, ball, group, mat, canvasTex, screen, rng, pick, hotspot, imageTex, planks, fabric, liveScreen } from './kit.js';
+import { prop } from './props.js';
 
 export const OFFICE_LOOK = {
-    wall: 0x2f6168, dado: 0x1f444a, floor: 0xa9825a, trim: 0xe9dfcf, light: 0xffdcae, accent: 0xffb36b,
-    accentAt: [3.0, 1.5, -0.4], spot: 38, fill: 6, accentPower: 9,
+    wall: 0x6f8a72, dado: 0xdcd2bc, floor: 0xa9825a, trim: 0xf1ece2, light: 0xffd9a8, accent: 0xffb36b, shade: 0xe9dfcf,
+    accentAt: [2.6, 1.2, 0.6], spot: 40, fill: 6, accentPower: 6, fireplace: true, mantel: 0xf1ece2,
     floorMaterial: () => planks(0xc79b6b, 0x9a7148, 2, 2),
 };
 
@@ -88,31 +89,39 @@ function codeTexture(seed) {
     });
 }
 
+/** The view out the back: garden trees and rooftops at dusk. */
 function windowTexture() {
     const rand = rng('window');
     return canvasTex(256, 192, (ctx, w, h) => {
         const grad = ctx.createLinearGradient(0, 0, 0, h);
-        grad.addColorStop(0, '#11183f');
-        grad.addColorStop(0.7, '#4a2f6b');
-        grad.addColorStop(1, '#d9805f');
+        grad.addColorStop(0, '#16224f');
+        grad.addColorStop(0.7, '#5a5c94');
+        grad.addColorStop(1, '#e8ad88');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, w, h);
         ctx.fillStyle = '#fff1d6';
         ctx.beginPath();
-        ctx.arc(60, 44, 14, 0, Math.PI * 2);
+        ctx.arc(196, 40, 11, 0, Math.PI * 2);
         ctx.fill();
-        for (let x = 0; x < w; x += 22 + rand() * 14) {
-            const bh = 40 + rand() * 80;
-            ctx.fillStyle = '#0c1030';
-            ctx.fillRect(x, h - bh, 26, bh);
-            for (let yy = h - bh + 6; yy < h - 4; yy += 9) {
-                for (let xx = x + 4; xx < x + 22; xx += 7) {
-                    if (rand() < 0.35) {
-                        ctx.fillStyle = '#f6c177';
-                        ctx.fillRect(xx, yy, 3, 4);
-                    }
-                }
-            }
+        // rooftops with chimneys
+        ctx.fillStyle = '#141a33';
+        for (let x = -20; x < w; x += 70) {
+            const top = h - 62 - rand() * 14;
+            ctx.beginPath();
+            ctx.moveTo(x, h - 30);
+            ctx.lineTo(x + 35, top);
+            ctx.lineTo(x + 70, h - 30);
+            ctx.fill();
+            ctx.fillRect(x + 44, top - 4, 9, 22);
+            ctx.fillRect(x, h - 30, 70, 30);
+            if (rand() < 0.7) { ctx.fillStyle = '#f2b66f'; ctx.fillRect(x + 14, h - 22, 8, 10); ctx.fillStyle = '#141a33'; }
+        }
+        // garden trees
+        ctx.fillStyle = '#0f2a22';
+        for (const [x, r] of [[30, 34], [88, 26], [232, 38]]) {
+            ctx.beginPath();
+            ctx.arc(x, h - 10, r, 0, Math.PI * 2);
+            ctx.fill();
         }
     });
 }
@@ -143,9 +152,9 @@ export function buildOffice(parent, data) {
     const spots = [];
 
     // Rug
-    box(3.6, 0.02, 2.2, 0, { at: [0.4, 0, 0.3], parent: g, shadow: false, material: fabric(0xe2d5bf) }).receiveShadow = true;
-    box(3.2, 0.022, 1.8, 0, { at: [0.4, 0, 0.3], parent: g, shadow: false, material: fabric(0xc9694f) }).receiveShadow = true;
-    box(2.8, 0.024, 1.4, 0, { at: [0.4, 0, 0.3], parent: g, shadow: false, material: fabric(0xe2d5bf) }).receiveShadow = true;
+    box(3.6, 0.02, 2.2, 0, { at: [0.6, 0, 0.3], parent: g, shadow: false, material: fabric(0xe2d5bf) }).receiveShadow = true;
+    box(3.2, 0.022, 1.8, 0, { at: [0.6, 0, 0.3], parent: g, shadow: false, material: fabric(0xc9694f) }).receiveShadow = true;
+    box(2.8, 0.024, 1.4, 0, { at: [0.6, 0, 0.3], parent: g, shadow: false, material: fabric(0xe2d5bf) }).receiveShadow = true;
 
     // Desk
     const desk = group(g, [-1.55, 0, -1.7]);
@@ -237,30 +246,27 @@ export function buildOffice(parent, data) {
     }
     spots.push(hotspot(shelf, 'writing', 'The bookshelf · writing', [0, 2.62, 0.1]));
 
-    // Reading corner
-    const arm = group(g, [2.5, 0, 0.55], -0.75);
-    box(0.95, 0.3, 0.9, 0, { at: [0, 0.12, 0], parent: arm, r: 0.08, material: fabric(0x3d8a8f) });
-    box(0.95, 0.6, 0.22, 0, { at: [0, 0.3, -0.36], parent: arm, r: 0.08, material: fabric(0x3d8a8f) });
-    for (const x of [-0.42, 0.42]) box(0.16, 0.34, 0.85, 0, { at: [x, 0.28, 0], parent: arm, r: 0.07, material: fabric(0x347a80) });
-    for (const [x, z] of [[-0.38, -0.36], [0.38, -0.36], [-0.38, 0.36], [0.38, 0.36]]) cyl(0.03, 0.02, 0.12, 0x1b1d28, { at: [x, 0, z], parent: arm, seg: 8 });
-    box(0.36, 0.3, 0.1, 0xffd166, { at: [0.05, 0.45, -0.2], parent: arm, r: 0.05, rx: -0.25 });
-    const fl = group(g, [3.55, 0, -0.6]);
+    // Reading chair by the fire
+    if (!prop('armchair', { at: [2.3, 0, 1.3], ry: 1.05, parent: g, colors: { fabric: 0x3d7a78 } })) {
+        box(0.95, 0.5, 0.9, 0, { at: [2.3, 0.1, 1.3], parent: g, r: 0.1, material: fabric(0x3d7a78) });
+    }
+    box(0.36, 0.3, 0.1, 0xe2b04a, { at: [2.22, 0.5, 1.28], parent: g, r: 0.05, ry: 1.05 });
+    cyl(0.22, 0.22, 0.03, 0x6f482c, { at: [2.75, 0.48, 2.0], parent: g });
+    cyl(0.02, 0.12, 0.48, 0x6f482c, { at: [2.75, 0, 2.0], parent: g, seg: 10 });
+    box(0.2, 0.03, 0.14, 0x7a2f2a, { at: [2.75, 0.51, 2.0], parent: g, ry: 0.4 });
+    const fl = group(g, [3.5, 0, -1.2]);
     cyl(0.17, 0.19, 0.03, 0x1b1d28, { at: [0, 0, 0], parent: fl });
     cyl(0.015, 0.015, 1.6, 0x1b1d28, { at: [0, 0.03, 0], parent: fl, seg: 8 });
     cyl(0.16, 0.24, 0.3, 0xfff1d6, { at: [0, 1.6, 0], parent: fl, emissive: 0xffd9a0, glow: 3.5 });
 
     // Big plant
-    const plant = group(g, [-3.45, 0, -1.75]);
-    cyl(0.26, 0.2, 0.42, 0xe9dfcf, { at: [0, 0, 0], parent: plant });
-    cyl(0.02, 0.03, 0.9, 0x4a352b, { at: [0, 0.4, 0], parent: plant, seg: 6 });
-    for (let i = 0; i < 7; i++) {
-        const a = (i / 7) * Math.PI * 2;
-        const leaf = ball(0.3, 0x3d8a66, { at: [Math.cos(a) * 0.28, 1.0 + (i % 3) * 0.22, Math.sin(a) * 0.28], parent: plant, flat: true, scale: [1, 0.35, 0.6] });
-        leaf.rotation.set(0.5 * Math.sin(a), -a, 0.6);
+    if (!prop('plant', { at: [-3.4, 0, -1.8], ry: 0.4, parent: g })) {
+        cyl(0.26, 0.2, 0.42, 0xe9dfcf, { at: [-3.4, 0, -1.8], parent: g });
+        ball(0.5, 0x3d8a66, { at: [-3.4, 1.0, -1.8], parent: g, flat: true });
     }
 
     // Electronics bench under the window: scope, soldering iron, a board with a blinking LED
-    const bench = group(g, [-3.5, 0, 0.9], Math.PI / 2);
+    const bench = group(g, [-2.7, 0, 1.25], 0.3);
     box(1.7, 0.06, 0.6, 0x8b5e3c, { at: [0, 0.8, 0], parent: bench, r: 0.015 });
     for (const x of [-0.78, 0.78]) box(0.05, 0.8, 0.52, 0x1b1d28, { at: [x, 0, 0], parent: bench });
     box(1.5, 0.04, 0.5, 0x8b5e3c, { at: [0, 0.25, 0], parent: bench });
@@ -291,10 +297,10 @@ export function buildOffice(parent, data) {
     cyl(0.06, 0.06, 0.07, 0xcfd3e0, { at: [-0.6, 0.86, -0.15], parent: bench, metal: 0.8, rough: 0.3 });
     for (let i = 0; i < 4; i++) box(0.14, 0.1, 0.2, [0xffd166, 0x5ef2d6, 0xc9694f, 0xe9dfcf][i], { at: [-0.55 + i * 0.36, 0.29, 0.05], parent: bench, r: 0.01 });
     // stool
-    cyl(0.17, 0.17, 0.05, 0xc9694f, { at: [-2.75, 0.55, 0.9], parent: g });
+    cyl(0.17, 0.17, 0.05, 0xc9694f, { at: [-2.3, 0.55, 1.95], parent: g });
     for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2;
-        cyl(0.015, 0.015, 0.58, 0x1b1d28, { at: [-2.75 + Math.cos(a) * 0.12, 0, 0.9 + Math.sin(a) * 0.12], parent: g, seg: 6 });
+        cyl(0.015, 0.015, 0.58, 0x1b1d28, { at: [-2.3 + Math.cos(a) * 0.12, 0, 1.95 + Math.sin(a) * 0.12], parent: g, seg: 6 });
     }
 
     // Steam off the mug
