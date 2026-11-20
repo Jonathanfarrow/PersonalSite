@@ -1,9 +1,15 @@
-// Renderer, lights, camera moves and picking for the 3D building.
+// Renderer, lights, post-processing, camera moves and picking for the 3D building.
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { DIM, floorY, buildShell, buildStreet, buildSky } from './building.js';
 import { buildStudio, STUDIO_LOOK } from './studio.js';
 import { buildOffice, OFFICE_LOOK } from './office.js';
-import { buildGames, GAMES_LOOK, checkerFloorMaterial } from './games.js';
+import { buildGames, GAMES_LOOK } from './games.js';
 
 // Bottom storey first.
 const ROOMS = [
@@ -14,24 +20,70 @@ const ROOMS = [
 
 const FOV = 30;
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const easeOut = (t) => 1 - Math.pow(1 - t, 4);
+
+// Miniature-style focus: sharp across a horizontal band, soft above and below, plus a vignette.
+const FocusShader = {
+    uniforms: {
+        tDiffuse: { value: null },
+        resolution: { value: new THREE.Vector2(1, 1) },
+        focusY: { value: 0.5 },
+        focusHalf: { value: 0.5 },
+        strength: { value: 0 },
+        vignette: { value: 0.35 },
+    },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform vec2 resolution;
+        uniform float focusY, focusHalf, strength, vignette;
+        varying vec2 vUv;
+        void main() {
+            float away = smoothstep(focusHalf, focusHalf + 0.3, abs(vUv.y - focusY));
+            float radius = away * strength;
+            vec3 sum = texture2D(tDiffuse, vUv).rgb;
+            float total = 1.0;
+            if (radius > 0.3) {
+                for (int i = 1; i <= 20; i++) {
+                    float f = float(i);
+                    float r = sqrt(f / 20.0) * radius;
+                    float a = f * 2.39996;
+                    vec3 s = texture2D(tDiffuse, vUv + vec2(cos(a), sin(a)) * r / resolution).rgb;
+                    float w = 1.0 + dot(s, vec3(0.3333)) * 0.6;
+                    sum += s * w;
+                    total += w;
+                }
+            }
+            vec3 color = sum / total;
+            vec2 q = vUv - 0.5;
+            color *= 1.0 - vignette * smoothstep(0.25, 0.95, dot(q, q) * 2.0);
+            gl_FragColor = vec4(color, 1.0);
+        }`,
+};
 
 export class World {
     constructor(canvas, data, handlers = {}) {
         this.canvas = canvas;
         this.handlers = handlers;
         this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // Phones and low-power machines skip the most expensive effect. ?quality=high|lite pins it.
+        const pinned = new URLSearchParams(location.search).get('quality');
+        this.lite = pinned ? pinned === 'lite'
+            : window.matchMedia('(max-width: 899px), (pointer: coarse)').matches || (navigator.hardwareConcurrency ?? 8) <= 4;
+        this.governor = pinned ? null : { level: 0, frames: 0, time: 0 };
         this.current = null;      // room id or null for the whole building
         this.insets = { left: 0, right: 0, top: 0, bottom: 0 };
         this.pointer = new THREE.Vector2(0, 0);
         this.parallax = new THREE.Vector2(0, 0);
         this.hovered = null;
         this.hoveredRoom = null;
+        this.tickers = [];
 
-        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.lite ? 1.5 : 2));
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.15;
+        this.renderer.toneMappingExposure = 1.05;
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -41,10 +93,15 @@ export class World {
         this.raycaster = new THREE.Raycaster();
 
         this.build(data);
+        this.setupPost();
         this.resize();
         this.cam = this.viewFor(null);
         this.tween = null;
         this.applyCamera(this.cam);
+
+        // Nothing that casts a shadow moves, so the shadow maps are drawn once.
+        this.renderer.shadowMap.autoUpdate = false;
+        this.renderer.shadowMap.needsUpdate = true;
 
         this.bind();
         this.clock = new THREE.Clock();
@@ -52,41 +109,71 @@ export class World {
     }
 
     build(data) {
-        buildSky(this.scene);
-        buildStreet(this.scene);
-        const looks = ROOMS.map((r) => ({ ...r.look }));
-        looks[0].floorMaterial = checkerFloorMaterial();
-        buildShell(this.scene, looks);
+        this.tickers.push(buildSky(this.scene).tick);
+        this.tickers.push(buildStreet(this.scene).tick);
+        this.tickers.push(buildShell(this.scene, ROOMS.map((r) => r.look)).tick);
 
-        this.scene.add(new THREE.HemisphereLight(0x8f95ff, 0x1c1526, 0.7));
-        const key = new THREE.DirectionalLight(0xffead6, 1.25);
-        key.position.set(6, 15, 16);
-        key.target.position.set(0, 4.5, 0);
-        key.castShadow = true;
-        key.shadow.mapSize.set(2048, 2048);
-        Object.assign(key.shadow.camera, { left: -10, right: 10, top: 9, bottom: -8, near: 1, far: 50 });
-        key.shadow.bias = -0.0005;
-        key.shadow.normalBias = 0.03;
-        key.shadow.radius = 4;
-        this.scene.add(key, key.target);
+        this.scene.add(new THREE.HemisphereLight(0x7f88e8, 0x1c1526, 0.42));
+        // Cool moonlight from the front-left; the rooms' own lamps are warm against it.
+        const moon = new THREE.DirectionalLight(0x9db2ff, 0.85);
+        moon.position.set(-9, 15, 15);
+        moon.target.position.set(0, 4.5, 0);
+        moon.castShadow = true;
+        moon.shadow.mapSize.set(2048, 2048);
+        Object.assign(moon.shadow.camera, { left: -12, right: 12, top: 10, bottom: -9, near: 1, far: 55 });
+        moon.shadow.bias = -0.0005;
+        moon.shadow.normalBias = 0.03;
+        moon.shadow.radius = 5;
+        this.scene.add(moon, moon.target);
 
         this.rooms = ROOMS.map((def, i) => {
             const y = floorY(i) + 0.04;
             const built = def.build(this.scene, data[def.id] ?? {});
             built.group.position.y = y;
+            if (built.tick) this.tickers.push(built.tick);
 
-            const main = new THREE.PointLight(def.look.light, 26, 11, 1.6);
-            main.position.set(0, y + 2.45, 0.9);
-            const accent = new THREE.PointLight(def.look.accent, 10, 7, 1.6);
-            accent.position.set(i % 2 ? 2.8 : -2.8, y + 1.3, 0.2);
-            this.scene.add(main, accent);
+            // Ceiling spot: the pool of light everything in the room sits in.
+            const spot = new THREE.SpotLight(def.look.light, 0, 12, 1.2, 1, 1.2);
+            spot.position.set(0.4, y + 2.86, 1.9);
+            spot.target.position.set(0, y + 0.6, -1.6);
+            spot.castShadow = true;
+            spot.shadow.mapSize.set(1024, 1024);
+            spot.shadow.bias = -0.0015;
+            spot.shadow.normalBias = 0.02;
+            spot.shadow.radius = 6;
+            spot.shadow.camera.near = 0.3;
+            spot.shadow.camera.far = 9;
+            const fill = new THREE.PointLight(def.look.light, 0, 9, 1.5);
+            fill.position.set(0, y + 2.2, 0.2);
+            const accent = new THREE.PointLight(def.look.accent, 0, 7.5, 1.5);
+            accent.position.set(...(def.look.accentAt ?? [-2.8, 1.2, 0.4]));
+            accent.position.y += y;
+            this.scene.add(spot, spot.target, fill, accent);
 
             const bounds = new THREE.Box3(
                 new THREE.Vector3(-DIM.W / 2, y, -DIM.D / 2),
                 new THREE.Vector3(DIM.W / 2, y + DIM.FLOOR - DIM.SLAB, DIM.D / 2)
             );
-            return { id: def.id, index: i, y, spots: built.spots, main, accent, bounds, lift: 0 };
+            return { id: def.id, index: i, y, look: def.look, spots: built.spots, spot, fill, accent, bounds, lift: 0, power: 0 };
         });
+    }
+
+    setupPost() {
+        const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: this.lite ? 2 : 4 });
+        this.composer = new EffectComposer(this.renderer, target);
+        this.composer.addPass(new RenderPass(this.scene, this.camera));
+        if (!this.lite) {
+            this.ao = new GTAOPass(this.scene, this.camera, 1, 1);
+            this.ao.blendIntensity = 0.9;
+            this.ao.updateGtaoMaterial({ radius: 0.55, distanceExponent: 1.4, thickness: 1.2, scale: 1.15, samples: 12, screenSpaceRadius: false });
+            this.ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+            this.composer.addPass(this.ao);
+        }
+        this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.26, 0.6, 1.0);
+        this.composer.addPass(this.bloom);
+        this.focus = new ShaderPass(FocusShader);
+        this.composer.addPass(this.focus);
+        this.composer.addPass(new OutputPass());
     }
 
     // ---- camera -----------------------------------------------------------
@@ -129,14 +216,14 @@ export class World {
         this.camera.setViewOffset(w, h, v.ox, v.oy, w, h);
     }
 
-    moveTo(view, seconds = 1.25) {
+    moveTo(view, seconds = 1.25, curve = ease) {
         if (this.reducedMotion || seconds === 0) {
             this.cam = view;
             this.tween = null;
             return;
         }
         const from = { pos: this.cam.pos.clone(), target: this.cam.target.clone(), ox: this.cam.ox, oy: this.cam.oy };
-        this.tween = { from, to: view, t: 0, seconds };
+        this.tween = { from, to: view, t: 0, seconds, curve };
     }
 
     /**
@@ -147,21 +234,41 @@ export class World {
         const next = { left: 0, right: 0, top: 0, bottom: 0, ...insets };
         const sameInsets = Object.keys(next).every((k) => next[k] === this.insets[k]);
         const sameRoom = roomId === this.current;
-        if (sameRoom && sameInsets) return;
+        if (sameRoom && sameInsets && this.started) return;
         this.insets = next;
         if (!sameRoom) {
             this.current = roomId;
             this.hoveredRoom = null;
             this.setHover(null);
         }
+        if (!this.started) {
+            this.started = true;
+            this.opening(roomId);
+            return;
+        }
         this.moveTo(this.viewFor(roomId), sameRoom ? 0.8 : 1.25);
+    }
+
+    /** First view: the building sits dark, the camera cranes down and the floors light up one by one. */
+    opening(roomId) {
+        const view = this.viewFor(roomId);
+        if (this.reducedMotion || roomId) {
+            this.cam = view;
+            this.rooms.forEach((r) => { r.powerAt = 0; });
+            return;
+        }
+        const offset = view.pos.clone().sub(view.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.55).multiplyScalar(1.3);
+        offset.y += 7;
+        this.cam = { pos: view.target.clone().add(offset), target: view.target.clone().add(new THREE.Vector3(0, 1.2, 0)), ox: view.ox, oy: view.oy };
+        this.moveTo(view, 3.4, easeOut);
+        this.rooms.forEach((r, i) => { r.powerAt = 0.55 + i * 0.45; });
     }
 
     /** Screen position (CSS px) of a room's label anchor. */
     labelPosition(roomId) {
         const room = this.rooms.find((r) => r.id === roomId);
         const p = new THREE.Vector3(-DIM.W / 2 - DIM.WALL, room.y + 1.45, DIM.D / 2).project(this.camera);
-        return { x: (p.x * 0.5 + 0.5) * this.size.w, y: (-p.y * 0.5 + 0.5) * this.size.h, behind: p.z > 1 };
+        return { x: (p.x * 0.5 + 0.5) * this.size.w, y: (-p.y * 0.5 + 0.5) * this.size.h };
     }
 
     // ---- interaction ------------------------------------------------------
@@ -170,13 +277,17 @@ export class World {
         const c = this.canvas;
         this.resizeObserver = new ResizeObserver(() => {
             this.resize();
-            this.moveTo(this.viewFor(this.current), 0);
+            if (this.tween) this.tween.to = this.viewFor(this.current);
+            else if (this.started) this.cam = this.viewFor(this.current);
         });
         this.resizeObserver.observe(c.parentElement);
 
-        c.addEventListener('pointermove', (e) => {
+        const aim = (e) => {
             const r = c.getBoundingClientRect();
             this.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+        };
+        c.addEventListener('pointermove', (e) => {
+            aim(e);
             if (e.pointerType !== 'touch') this.pick(e);
         });
         c.addEventListener('pointerleave', () => {
@@ -187,9 +298,8 @@ export class World {
         c.addEventListener('pointerdown', (e) => { this.down = { x: e.clientX, y: e.clientY }; });
         c.addEventListener('pointerup', (e) => {
             if (!this.down || Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > 8) return;
-            const r = c.getBoundingClientRect();
-            this.pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-            this.pick(e);
+            aim(e);
+            this.pick(e, true);
             if (this.current === null && this.hoveredRoom) {
                 this.handlers.onRoom?.(this.hoveredRoom.id);
             } else if (this.hovered) {
@@ -199,8 +309,9 @@ export class World {
         });
     }
 
-    pick(e) {
-        if (this.tween) return;
+    pick(e, force = false) {
+        // Mid-flight the picture is moving; only a deliberate click picks then.
+        if (this.tween && !force) return;
         this.raycaster.setFromCamera(this.pointer, this.camera);
         if (this.current === null) {
             let best = null;
@@ -247,20 +358,57 @@ export class World {
         const h = Math.max(el.clientHeight, 1);
         this._size = { w, h };
         this.renderer.setSize(w, h, false);
+        this.composer.setSize(w, h);
+        const ratio = this.renderer.getPixelRatio();
+        this.focus.uniforms.resolution.value.set(w * ratio, h * ratio);
         this.camera.aspect = w / h;
         this.camera.updateProjectionMatrix();
     }
 
+    /** Keeps the room you are in sharp and lets the floors above and below fall soft. */
+    updateFocus(dt) {
+        const u = this.focus.uniforms;
+        const room = this.rooms.find((r) => r.id === this.current);
+        const toUv = (worldY) => new THREE.Vector3(0, worldY, DIM.D / 2).project(this.camera).y * 0.5 + 0.5;
+        const lo = toUv(room ? room.y - 0.1 : 0.2);
+        const hi = toUv(room ? room.y + DIM.FLOOR - 0.1 : floorY(this.rooms.length) + 1.6);
+        const half = (hi - lo) / 2 + (room ? 0.02 : 0.06);
+        const strength = (room ? 6 : 3) * this.renderer.getPixelRatio();
+        const k = 1 - Math.exp(-dt * 5);
+        u.focusY.value += ((lo + hi) / 2 - u.focusY.value) * k;
+        u.focusHalf.value += (half - u.focusHalf.value) * k;
+        u.strength.value += (strength - u.strength.value) * k;
+    }
+
+    /** Sheds effects, cheapest loss first, if the machine cannot hold a smooth frame rate. */
+    govern(raw) {
+        const g = this.governor;
+        if (!g || g.level >= 3 || raw > 0.5) return;
+        g.frames++;
+        g.time += raw;
+        if (g.frames < 50) return;
+        const slow = g.time / g.frames > 1 / 36;
+        g.frames = 0;
+        g.time = 0;
+        if (!slow) return;
+        g.level++;
+        if (g.level === 1) this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+        if (g.level === 2 && this.ao) this.ao.enabled = false;
+        if (g.level === 3) { this.renderer.setPixelRatio(1); this.focus.enabled = false; }
+        this.composer.setPixelRatio(this.renderer.getPixelRatio());
+        this.resize();
+    }
+
     frame() {
-        if (document.hidden) return;
+        if (document.hidden) { this.clock.getDelta(); return; }
         const raw = this.clock.getDelta();
         const dt = Math.min(raw, 0.05);
         const time = this.clock.elapsedTime;
 
         if (this.tween) {
             const tw = this.tween;
-            tw.t = Math.min(tw.t + Math.min(raw, 0.25) / tw.seconds, 1); // real time, so slow devices are not slow-motion
-            const k = ease(tw.t);
+            tw.t = Math.min(tw.t + raw / tw.seconds, 1); // real time, so slow devices are not slow-motion
+            const k = tw.curve(tw.t);
             this.cam = {
                 pos: tw.from.pos.clone().lerp(tw.to.pos, k),
                 target: tw.from.target.clone().lerp(tw.to.target, k),
@@ -271,13 +419,23 @@ export class World {
         }
         this.parallax.lerp(this.pointer, 1 - Math.exp(-dt * 3));
         this.applyCamera(this.cam);
+        this.updateFocus(dt);
 
+        if (this.started) this.sinceStart = (this.sinceStart ?? 0) + raw;
         for (const room of this.rooms) {
+            // Lights come on floor by floor, with a flicker as they catch.
+            if (room.powerAt !== undefined && this.sinceStart >= room.powerAt) {
+                const age = this.sinceStart - room.powerAt;
+                const flicker = age < 0.35 && !this.reducedMotion ? (Math.sin(age * 90) > 0 ? 1 : 0.25) : 1;
+                room.power = Math.min(age / 0.12, 1) * flicker;
+            }
             // The room you point at (or stand in) glows a little brighter.
             const lit = room === this.hoveredRoom || room.id === this.current ? 1 : 0;
             room.lift += (lit - room.lift) * (1 - Math.exp(-dt * 8));
-            room.main.intensity = 26 * (1 + room.lift * 0.45);
-            room.accent.intensity = 10 * (1 + room.lift * 0.6);
+            const level = room.power * (1 + room.lift * 0.3);
+            room.spot.intensity = (room.look.spot ?? 36) * level;
+            room.fill.intensity = (room.look.fill ?? 5) * level;
+            room.accent.intensity = (room.look.accentPower ?? 10) * room.power * (1 + room.lift * 0.5);
 
             const showPips = room.id === this.current && !this.tween;
             for (const spot of room.spots) {
@@ -287,16 +445,19 @@ export class World {
                 const pip = s.pip;
                 pip.visible = showPips;
                 if (showPips) {
-                    const bob = this.reducedMotion ? 0 : Math.sin(time * 2.2 + pip.userData.pip.phase) * 0.03;
-                    pip.position.y = pip.userData.pip.baseY + bob;
+                    const phase = (time * 0.8 + pip.userData.pip.phase) % 1;
+                    pip.position.y = pip.userData.pip.baseY + (this.reducedMotion ? 0 : Math.sin(time * 2.2 + pip.userData.pip.phase) * 0.03);
                     pip.lookAt(this.camera.position);
-                    pip.children[0].scale.setScalar(1 + (this.reducedMotion ? 0.3 : (time * 0.8 + pip.userData.pip.phase) % 1));
-                    pip.children[0].material.opacity = this.reducedMotion ? 0.6 : 0.8 * (1 - ((time * 0.8 + pip.userData.pip.phase) % 1));
+                    pip.children[0].scale.setScalar(1 + (this.reducedMotion ? 0.3 : phase));
+                    pip.children[0].material.opacity = this.reducedMotion ? 0.6 : 0.8 * (1 - phase);
                 }
             }
         }
 
-        this.renderer.render(this.scene, this.camera);
+        if (!this.reducedMotion) for (const tick of this.tickers) tick?.(time, dt);
+
+        this.composer.render(dt);
         this.handlers.onFrame?.();
+        this.govern(raw);
     }
 }

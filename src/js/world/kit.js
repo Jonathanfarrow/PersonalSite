@@ -84,7 +84,8 @@ export function screen(w, h, texture, o = {}) {
         new THREE.PlaneGeometry(w, h),
         new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, transparent: !!o.transparent })
     );
-    m.material.color.setScalar(o.brightness ?? 1);
+    m.material.color.setScalar(o.brightness ?? 1.25);
+    if (o.transparent) { m.userData.noAO = true; m.material.depthWrite = false; }
     const [x, y, z] = o.at ?? [0, 0, 0];
     m.position.set(x, y, z);
     if (o.rx) m.rotation.x = o.rx;
@@ -115,7 +116,7 @@ export function neonText(text, color, o = {}) {
         ctx.fillText(text, w / 2, h / 2);
     });
     const height = o.height ?? 0.4;
-    return screen(height * (w / h), height, tex, { ...o, transparent: true });
+    return screen(height * (w / h), height, tex, { brightness: 1.9, ...o, transparent: true });
 }
 
 /** Deterministic random numbers from a string, so each item keeps its look. */
@@ -141,12 +142,14 @@ export function hotspot(object, id, label, pipAt) {
     object.userData.hotspot = { id, label };
     const pip = new THREE.Mesh(
         new THREE.SphereGeometry(0.045, 12, 10),
-        new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.2, 2.2), toneMapped: false })
     );
+    pip.userData.noAO = true;
     const halo = new THREE.Mesh(
         new THREE.RingGeometry(0.07, 0.085, 24),
         new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, toneMapped: false })
     );
+    halo.userData.noAO = true;
     pip.add(halo);
     pip.position.set(...pipAt);
     pip.userData.pip = { baseY: pipAt[1], phase: Math.random() * 6 };
@@ -162,4 +165,122 @@ export function imageTex(url, onLoad) {
         t.colorSpace = THREE.SRGBColorSpace;
         onLoad(t);
     }, undefined, () => {});
+}
+
+// ---- textured surfaces -----------------------------------------------------
+
+function grain(size, draw) {
+    const t = canvasTex(size, size, draw);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+}
+
+let noiseBump;
+function noiseTexture() {
+    noiseBump ??= grain(256, (ctx, w, h) => {
+        const rand = rng('plaster');
+        const img = ctx.createImageData(w, h);
+        for (let i = 0; i < img.data.length; i += 4) {
+            const v = 118 + rand() * 40 + (rand() < 0.02 ? -40 : 0);
+            img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+            img.data[i + 3] = 255;
+        }
+        ctx.putImageData(img, 0, 0);
+        ctx.globalAlpha = 0.5;
+        ctx.filter = 'blur(2px)';
+        ctx.drawImage(ctx.canvas, 0, 0);
+    });
+    return noiseBump;
+}
+
+function repeated(tex, rx, ry) {
+    const t = tex.clone();
+    t.repeat.set(rx, ry);
+    t.needsUpdate = true;
+    return t;
+}
+
+/** Painted plaster wall: a flat colour that still catches the light. */
+export function plaster(color, rx = 4, ry = 2) {
+    return new THREE.MeshStandardMaterial({
+        color, roughness: 0.92, bumpMap: repeated(noiseTexture(), rx, ry), bumpScale: 0.6,
+    });
+}
+
+/** Soft furnishings. */
+export function fabric(color, rough = 0.95) {
+    return new THREE.MeshStandardMaterial({
+        color, roughness: rough, bumpMap: repeated(noiseTexture(), 6, 6), bumpScale: 1.2,
+    });
+}
+
+/** Floorboards running left to right. */
+export function planks(light, dark, rx = 2, ry = 2) {
+    const tex = grain(512, (ctx, w, h) => {
+        const rand = rng('planks' + light);
+        const rows = 8;
+        const a = new THREE.Color(light);
+        const b = new THREE.Color(dark);
+        for (let r = 0; r < rows; r++) {
+            let x = -rand() * 200;
+            while (x < w) {
+                const len = 140 + rand() * 200;
+                const c = a.clone().lerp(b, rand() * 0.75);
+                ctx.fillStyle = `#${c.getHexString()}`;
+                ctx.fillRect(x, r * (h / rows), len, h / rows);
+                ctx.fillStyle = 'rgba(0,0,0,0.28)';
+                ctx.fillRect(x, r * (h / rows), 2, h / rows);
+                x += len;
+            }
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(0, r * (h / rows), w, 2);
+        }
+        for (let i = 0; i < 900; i++) {
+            ctx.fillStyle = `rgba(${rand() < 0.5 ? '0,0,0' : '255,255,255'},${0.02 + rand() * 0.05})`;
+            ctx.fillRect(rand() * w, rand() * h, 20 + rand() * 90, 1);
+        }
+    });
+    tex.repeat.set(rx, ry);
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.62, bumpMap: tex, bumpScale: 0.35 });
+}
+
+/** Brickwork for the outside of the building. */
+export function brick(color, mortar, rx = 3, ry = 4) {
+    const tex = grain(256, (ctx, w, h) => {
+        const rand = rng('brick');
+        const base = new THREE.Color(color);
+        ctx.fillStyle = mortar;
+        ctx.fillRect(0, 0, w, h);
+        const bw = 64, bh = 21.33;
+        for (let r = 0; r < 12; r++) {
+            for (let c = -1; c < 5; c++) {
+                const shade = base.clone().offsetHSL((rand() - 0.5) * 0.02, 0, (rand() - 0.5) * 0.07);
+                ctx.fillStyle = `#${shade.getHexString()}`;
+                ctx.fillRect(c * bw + (r % 2 ? bw / 2 : 0) + 1.5, r * bh + 1.5, bw - 3, bh - 3);
+            }
+        }
+    });
+    tex.repeat.set(rx, ry);
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, bumpMap: tex, bumpScale: 0.8 });
+}
+
+/** A canvas that is repainted while the scene runs (screens, scopes). */
+export function liveScreen(w, h, pxW, pxH, paint, o = {}) {
+    const canvas = document.createElement('canvas');
+    canvas.width = pxW;
+    canvas.height = pxH;
+    const ctx = canvas.getContext('2d');
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    paint(ctx, pxW, pxH, 0);
+    const mesh = screen(w, h, tex, o);
+    let last = -1;
+    mesh.userData.repaint = (time) => {
+        if (time - last < (o.interval ?? 0.1)) return;
+        last = time;
+        paint(ctx, pxW, pxH, time);
+        tex.needsUpdate = true;
+    };
+    return mesh;
 }
