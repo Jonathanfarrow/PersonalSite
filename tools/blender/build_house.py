@@ -141,7 +141,7 @@ M = {
     'brass': flat('brass', srgb(0xc9a25a), rough=0.3, metal=1.0),
     'terracotta': noise_mat('terracotta', srgb(0xb5633f), srgb(0xc9754c), scale=30, bump=0.1, rough=0.8),
     'gravel': noise_mat('gravel', srgb(0x7d705c), srgb(0xa89a80), scale=260, bump=1.0, rough=0.95, detail=2),
-    'grass': noise_mat('grass', srgb(0x2f5a2c), srgb(0x4a7a3a), scale=60, bump=0.6, rough=0.95),
+    'grass': noise_mat('grass', srgb(0x3a5a30), srgb(0x55733c), scale=3.5, bump=0.3, rough=0.95),
     'hedge': noise_mat('hedge', srgb(0x1f4526), srgb(0x356b34), scale=40, bump=0.9, rough=0.9),
     'conifer': noise_mat('conifer', srgb(0x7f9a2a), srgb(0xb5c04a), scale=40, bump=0.9, rough=0.9),
     'leaf': noise_mat('leaf', srgb(0x244d2a), srgb(0x3f7a3c), scale=25, bump=0.8, rough=0.85),
@@ -152,7 +152,7 @@ M = {
     'glass_lit': flat('glass_lit', srgb(0xffd9a0), rough=0.2, emit=srgb(0xffc47a), strength=6.0),
     'glass_dim': flat('glass_dim', srgb(0xffd9a0), rough=0.2, emit=srgb(0xffb86a), strength=1.6),
     'glass_dark': flat('glass_dark', srgb(0x1a2638), rough=0.05, metal=0.6),
-    'curtain': flat('curtain', srgb(0xd9b99a), rough=0.9, emit=srgb(0xffc890), strength=1.2),
+    'curtain': flat('curtain', srgb(0xcfa98a), rough=0.9, emit=srgb(0xffb070), strength=0.25),
     'flower_a': flat('flower_a', srgb(0xd96a8a), rough=0.7),
     'flower_b': flat('flower_b', srgb(0xe9d9f2), rough=0.7),
     'flower_c': flat('flower_c', srgb(0xf2c84a), rough=0.7),
@@ -163,6 +163,11 @@ M = {
     'curtain_dark': flat('curtain_dark', srgb(0x8a8f9a), rough=0.9),
     'sofa': flat('sofa', srgb(0x2f5d62), rough=0.95),
     'cushion': flat('cushion', srgb(0xe2b04a), rough=0.95),
+    'leaf2': noise_mat('leaf2', srgb(0x3d6b2c), srgb(0x6a9440), scale=25, bump=0.5, rough=0.8),
+    'field': noise_mat('field', srgb(0x4a6638), srgb(0x7d8a4a), scale=0.6, bump=0.05, rough=0.95),
+    'flower_d': flat('flower_d', srgb(0x9a7fd9), rough=0.7),
+    'flower_e': flat('flower_e', srgb(0xf4f0e6), rough=0.7),
+    'hedge_dark': flat('hedge_dark', srgb(0x16301c), rough=0.95),
     'lamp': flat('lamp', srgb(0xffe2b0), emit=srgb(0xffc98a), strength=25.0),
 }
 
@@ -227,6 +232,28 @@ def blob(name, radius, loc, mat, scale=(1, 1, 1), strength=0.35, noise_scale=1.2
     o.location = loc; o.scale = scale
     tex = bpy.data.textures.new(name + '_n', 'CLOUDS'); tex.noise_scale = noise_scale * radius
     mod = o.modifiers.new('d', 'DISPLACE'); mod.texture = tex; mod.strength = strength * radius; mod.texture_coords = 'GLOBAL'
+    return o
+
+def leafy(name, radius, loc, mat, leaf=0.16, count=260, scale=(1, 1, 1), core=True):
+    """A clump of foliage: many small tilted leaves scattered over a lumpy volume."""
+    bm = bmesh.new()
+    for _ in range(count):
+        # point on a noisy ellipsoid shell, biased outward
+        u = random.uniform(-1, 1); a = random.uniform(0, math.tau)
+        rr = math.sqrt(1 - u * u)
+        d = radius * random.uniform(0.72, 1.05)
+        p = Vector((math.cos(a) * rr * d * scale[0], math.sin(a) * rr * d * scale[1], u * d * scale[2]))
+        n = p.normalized()
+        t = n.cross(Vector((random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1)))).normalized()
+        b2 = n.cross(t)
+        tilt = (n * random.uniform(-0.5, 0.5))
+        s = leaf * random.uniform(0.7, 1.3)
+        vs = [bm.verts.new(p + t * s * dx + (b2 + tilt) * s * dy) for dx, dy in ((0, -0.6), (0.5, 0), (0, 0.6), (-0.5, 0))]
+        bm.faces.new(vs)
+    o = obj_from_bm(name, bm, mat)
+    o.location = loc
+    if core:
+        c = blob(name + '_core', radius * 0.8, loc, mat, scale=scale, strength=0.25, sub=2)
     return o
 
 # ---------------------------------------------------------------- windows & doors
@@ -355,9 +382,9 @@ def build_house():
         door_x = side * 5.0
         win_z = G_H + 0.82 + 1.6 / 2
         for wx in (side * 2.25, side * 5.0):
-            is_lit = (wx > 0) or abs(wx) > 3
+            is_lit = wx > 0
             cut(first, (1.1, 5.2, 1.6), (wx, 0.2, win_z))
-            sash(wx, win_z, h=1.6, lit='glass_lit' if is_lit else None, arch=False, paper='wallpaper_c' if abs(wx) > 3 else 'wallpaper_a', energy=38 if wx > 0 else 22)
+            sash(wx, win_z, h=1.6, lit='glass_lit' if is_lit else None, arch=False, paper='wallpaper_c' if abs(wx) > 3 else 'wallpaper_a', energy=44)
             box('surround', (1.34, 0.06, 0.1), (wx, -0.01, win_z + 0.8 + 0.07), 'paint', bevel=0.01)
             for sx in (-1, 1): box('surround', (0.1, 0.06, 1.6), (wx + sx * 0.62, -0.01, win_z), 'paint', bevel=0.01)
         cut(ground, (0.95, 0.8, 2.05), (door_x, 0.2, 0.35 + 2.05 / 2))
@@ -442,105 +469,157 @@ def build_house():
 
 # ---------------------------------------------------------------- garden & street
 def build_garden():
-    # ground
-    g = box('lawn', (70, 70, 0.2), (0, 5, -0.1), 'grass')
-    box('drive', (W + 5, 6.2, 0.06), (0.5, -3.3, 0.03), 'gravel')
-    box('pavement', (60, 2.0, 0.12), (0, -8.1, 0.06), 'flag')
-    box('kerb', (60, 0.18, 0.16), (0, -9.15, 0.08), 'stone', bevel=0.02)
-    box('road', (60, 7, 0.04), (0, -12.7, 0.02), 'tarmac')
-    # low brick wall with stone coping and piers, a gap at each drive
-    for x0, x1 in ((-13, -4.2), (-1.6, 1.6), (4.2, 13)):
+    box('lawn', (90, 90, 0.2), (0, 8, -0.1), 'grass')
+    box('drive', (9.0, 6.4, 0.06), (4.0, -3.4, 0.03), 'gravel')
+    box('front_lawn', (6.0, 4.6, 0.09), (-4.0, -4.3, 0.045), 'grass')
+    # stone path from the gate to the door, flags set a little unevenly
+    for i in range(9):
+        box('path', (1.05, 0.62, 0.05), (5.0 + random.uniform(-0.04, 0.04), -0.75 - i * 0.68, 0.075), 'stone', bevel=0.02, rot=(0, 0, random.uniform(-0.05, 0.05)))
+    box('pavement', (70, 2.0, 0.12), (0, -8.3, 0.06), 'flag')
+    box('kerb', (70, 0.18, 0.16), (0, -9.35, 0.08), 'stone', bevel=0.02)
+    box('road', (70, 7, 0.04), (0, -12.9, 0.02), 'tarmac')
+
+    # low brick garden wall with stone coping; piers and a little gate at the path
+    for x0, x1 in ((-14, 4.25), (5.75, 8.6)):
         w = x1 - x0
-        box('wall', (w, 0.24, 0.7), ((x0 + x1) / 2, -6.9, 0.35), 'brick')
-        box('coping', (w + 0.04, 0.32, 0.07), ((x0 + x1) / 2, -6.9, 0.735), 'stone', bevel=0.015)
-    for px in (-4.2, -1.6, 1.6, 4.2):
-        box('pier', (0.46, 0.46, 1.05), (px, -6.9, 0.525), 'brick')
-        box('pier_cap', (0.58, 0.58, 0.1), (px, -6.9, 1.1), 'stone', bevel=0.03)
-        blob('pier_ball', 0.14, (px, -6.9, 1.28), 'stone', strength=0.0, sub=2)
-    # flower beds under the bays and along the wall
-    for side in (-1, 1):
-        bx = side * 2.25
-        box('bed', (3.6, 0.9, 0.12), (bx, -1.35, 0.06), 'bark')
-        for i in range(9):
-            px = bx - 1.6 + i * 0.4 + random.uniform(-0.08, 0.08)
-            r = random.uniform(0.2, 0.34)
-            blob('bush', r, (px, -1.3 + random.uniform(-0.15, 0.15), r * 0.85), random.choice(['leaf', 'hedge', 'leaf']), scale=(1, 1, random.uniform(0.8, 1.1)), sub=2)
-            if i % 2 == 0:
-                for k in range(7):
-                    cyl('flower', 0.035, 0.02, 0.03, (px + random.uniform(-0.2, 0.2), -1.3 + random.uniform(-0.25, 0.25), r * 1.5 + random.uniform(0, 0.12)), random.choice(['flower_a', 'flower_b', 'flower_c']), seg=6)
-    # the golden conifer by the left-hand door, as in the photograph
-    for i in range(6):
-        t = i / 5
-        blob('conifer', 0.62 * (1 - t * 0.78), (-4.1 + random.uniform(-0.04, 0.04), -3.0, 0.5 + t * 1.55), 'conifer', scale=(1, 1, 1.25), strength=0.3, sub=3)
-    # clipped hedges down both boundaries
-    for hx, hh, hw in ((-8.2, 1.25, 0.9), (8.4, 1.7, 1.0)):
-        h = box('hedge', (hw, 12.5, hh), (hx, -0.6, hh / 2), 'hedge', bevel=0.16)
-        h.modifiers['bevel'].segments = 4
-        sub = h.modifiers.new('sub', 'SUBSURF'); sub.subdivision_type = 'SIMPLE'; sub.levels = 5; sub.render_levels = 5
-        tex = bpy.data.textures.new('hedge_n', 'CLOUDS'); tex.noise_scale = 0.12
-        d = h.modifiers.new('d', 'DISPLACE'); d.texture = tex; d.strength = 0.05; d.texture_coords = 'GLOBAL'
-    # climbing rose around the right-hand door
-    for i in range(26):
-        a = math.pi * i / 25
-        px = 5.0 + math.cos(a) * 0.95 + random.uniform(-0.06, 0.06)
-        pz = 0.5 + min(math.sin(a), 0.9) * 2.6 + random.uniform(-0.1, 0.1)
-        if 0.25 < a < math.pi - 0.25 or True:
-            blob('rose', random.uniform(0.11, 0.2), (px, -0.07, pz), 'leaf', sub=1, strength=0.3)
-            if random.random() < 0.55:
-                cyl('rose_fl', 0.04, 0.025, 0.035, (px + random.uniform(-0.05, 0.05), -0.2, pz + random.uniform(-0.05, 0.05)), 'flower_a', seg=6, rot=(math.pi / 2, 0, 0))
-    # pots by the doors
-    for px in (-5.9, -4.3, 4.2, 5.85):
-        cyl('pot_p', 0.2, 0.15, 0.34, (px, -0.55, 0.06), 'terracotta', seg=16)
-        blob('pot_plant', 0.26, (px, -0.55, 0.62), 'leaf', sub=2, strength=0.3)
-    # trees either side and behind: a forked trunk and a crown of many small leafy clumps
-    for tx, ty, sc in ((-12.0, 2.5, 1.0), (12.5, 4.0, 1.15), (-4.0, 13.0, 1.3), (6.0, 14.0, 1.2), (16.5, -3.0, 0.9), (-17, -2, 1.1)):
-        cyl('trunk', 0.24 * sc, 0.15 * sc, 3.0 * sc, (tx, ty, 0), 'bark', seg=10)
-        for k in range(4):
-            a = k * 1.7 + 0.4
-            br = cyl('branch', 0.1 * sc, 0.05 * sc, 2.2 * sc, (tx + math.cos(a) * 0.5 * sc, ty + math.sin(a) * 0.5 * sc, 3.7 * sc), 'bark', seg=8, rot=(math.sin(a) * -0.55, math.cos(a) * 0.55, 0))
-        for k in range(34):
-            a = random.uniform(0, math.tau); u = random.uniform(-0.35, 1)
-            rr = math.sqrt(max(0.0, 1 - u * u)) * random.uniform(0.75, 1.0)
-            r = random.uniform(0.5, 0.95) * sc
-            blob('crown', r, (tx + math.cos(a) * rr * 2.0 * sc, ty + math.sin(a) * rr * 2.0 * sc, (4.9 + u * 1.9) * sc), random.choice(['leaf', 'leaf', 'hedge']), strength=0.55, noise_scale=0.35, sub=3)
+        box('wall', (w, 0.24, 0.72), ((x0 + x1) / 2, -7.1, 0.36), 'brick')
+        box('coping', (w + 0.04, 0.32, 0.07), ((x0 + x1) / 2, -7.1, 0.755), 'stone', bevel=0.015)
+    for px in (4.25, 5.75):
+        box('pier', (0.46, 0.46, 1.1), (px, -7.1, 0.55), 'brick')
+        box('pier_cap', (0.6, 0.6, 0.1), (px, -7.1, 1.15), 'stone', bevel=0.03)
+        blob('pier_ball', 0.15, (px, -7.1, 1.34), 'stone', strength=0.0, sub=3)
+    for i in range(7):                                    # picket gate, standing ajar
+        gx = 4.55 + i * 0.15
+        box('gate', (0.09, 0.03, 0.85 + 0.12 * math.sin(i / 6 * math.pi)), (gx, -7.02 - (gx - 4.55) * 0.22, 0.5), 'paint', bevel=0.008)
+    for gz in (0.25, 0.7): box('gate_rail', (1.0, 0.03, 0.06), (5.0, -7.14, gz), 'paint', rot=(0, 0, -0.22))
+
+    # cottage border under the bay: mounds of foliage with drifts of flowers
+    def border(x0, x1, y, depth=1.0):
+        box('bed', (x1 - x0, depth, 0.1), ((x0 + x1) / 2, y, 0.05), 'bark')
+        n = int((x1 - x0) / 0.32)
+        for i in range(n):
+            px = x0 + 0.2 + i * (x1 - x0 - 0.4) / max(n - 1, 1) + random.uniform(-0.06, 0.06)
+            py = y + random.uniform(-depth * 0.3, depth * 0.3)
+            r = random.uniform(0.2, 0.36)
+            leafy('bush', r, (px, py, r * 0.9), random.choice(['leaf', 'hedge', 'leaf2']), leaf=0.07, count=140, scale=(1, 1, random.uniform(0.8, 1.2)))
+            kind = random.random()
+            if kind < 0.45:                                 # lavender / foxglove spikes
+                colr = random.choice(['flower_b', 'flower_d', 'flower_a'])
+                for k in range(6):
+                    cyl('spike', 0.03, 0.012, random.uniform(0.3, 0.55), (px + random.uniform(-0.2, 0.2), py + random.uniform(-0.2, 0.2), r * 1.2), colr, seg=6)
+            elif kind < 0.8:                                # daisies / roses
+                colr = random.choice(['flower_a', 'flower_c', 'flower_e'])
+                for k in range(10):
+                    blob('bloom', random.uniform(0.035, 0.06), (px + random.uniform(-0.25, 0.25), py + random.uniform(-0.25, 0.1), r * random.uniform(1.2, 1.9)), colr, strength=0.0, sub=1)
+    border(0.75, 3.75, -1.55, 1.0)
+    border(-13, 3.9, -6.55, 0.7)
+    border(6.1, 8.3, -6.55, 0.7)
+
+    # wisteria trained over the door and along the canopy
+    for i in range(60):
+        t = i / 59
+        if t < 0.3:   px, pz = 5.95 + random.uniform(-0.1, 0.1), 0.4 + t / 0.3 * 2.5
+        else:         px, pz = 5.95 - (t - 0.3) / 0.7 * 5.2, 2.95 + random.uniform(-0.12, 0.12)
+        leafy('wisteria', random.uniform(0.16, 0.26), (px, -0.12 - (0.5 if t >= 0.3 else 0), pz), 'leaf2', leaf=0.07, count=70, core=False)
+        if random.random() < 0.6:
+            for k in range(5):
+                blob('wist_fl', 0.05 - k * 0.006, (px + random.uniform(-0.1, 0.1), -0.22 - (0.55 if t >= 0.3 else 0), pz - 0.12 - k * 0.07), 'flower_d', strength=0.0, sub=1)
+    cyl('wist_stem', 0.035, 0.025, 2.9, (5.95, -0.1, 0.1), 'bark', seg=8)
+
+    # pots by the door, and two clipped balls by the gate
+    for px, r in ((4.2, 0.24), (5.85, 0.3)):
+        cyl('pot_p', 0.2, 0.15, 0.36, (px, -0.55, 0.06), 'terracotta', seg=18)
+        leafy('pot_plant', r, (px, -0.55, 0.42 + r), 'leaf', leaf=0.06, count=160)
+    # the golden conifer from the photograph, beside the drive
+    for i in range(7):
+        t = i / 6
+        leafy('conifer', 0.62 * (1 - t * 0.8), (0.2 + random.uniform(-0.03, 0.03), -3.4, 0.45 + t * 1.75), 'conifer', leaf=0.09, count=260, scale=(1, 1, 1.3))
+
+    # clipped hedge down the right boundary: a dark core dressed in small leaves
+    hx, hw, hl, hh = 9.2, 1.0, 13.0, 1.7
+    box('hedge_core', (hw - 0.12, hl - 0.12, hh - 0.06), (hx, -0.8, hh / 2 - 0.03), 'hedge_dark', bevel=0.12)
+    bm = bmesh.new()
+    for _ in range(9000):
+        f = random.random()
+        if f < 0.4:   p = Vector((random.choice((-1, 1)) * hw / 2, random.uniform(-hl / 2, hl / 2), random.uniform(0, hh))); n = Vector((1 if p.x > 0 else -1, 0, 0))
+        elif f < 0.9: p = Vector((random.uniform(-hw / 2, hw / 2), random.uniform(-hl / 2, hl / 2), hh)); n = Vector((0, 0, 1))
+        else:         p = Vector((random.uniform(-hw / 2, hw / 2), random.choice((-1, 1)) * hl / 2, random.uniform(0, hh))); n = Vector((0, 1 if p.y > 0 else -1, 0))
+        p += n * random.uniform(-0.05, 0.04)
+        t = n.cross(Vector((random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1)))).normalized(); b2 = n.cross(t) + n * random.uniform(-0.6, 0.6)
+        sz = random.uniform(0.05, 0.09)
+        bm.faces.new([bm.verts.new(p + t * sz * dx + b2 * sz * dy) for dx, dy in ((0, -0.6), (0.5, 0), (0, 0.6), (-0.5, 0))])
+    o = obj_from_bm('hedge_leaves', bm, 'hedge'); o.location = (hx, -0.8, 0)
+
+    # trees: a forked trunk and a crown of leafy clumps. One stands in front of the neighbour's half.
+    def tree(tx, ty, sc, clumps=22):
+        cyl('trunk', 0.26 * sc, 0.16 * sc, 3.1 * sc, (tx, ty, 0), 'bark', seg=12)
+        for k in range(5):
+            a = k * 1.3 + 0.4
+            cyl('branch', 0.1 * sc, 0.04 * sc, 2.6 * sc, (tx + math.cos(a) * 0.6 * sc, ty + math.sin(a) * 0.6 * sc, 3.9 * sc), 'bark', seg=8, rot=(math.sin(a) * -0.6, math.cos(a) * 0.6, 0))
+        for k in range(clumps):
+            a = random.uniform(0, math.tau); u = random.uniform(-0.3, 1)
+            rr = math.sqrt(max(0.0, 1 - u * u)) * random.uniform(0.5, 1.0)
+            r = random.uniform(0.7, 1.15) * sc
+            leafy('crown', r, (tx + math.cos(a) * rr * 2.2 * sc, ty + math.sin(a) * rr * 2.2 * sc, (5.1 + u * 2.1) * sc), random.choice(['leaf', 'leaf2', 'hedge']), leaf=0.2 * sc, count=330)
+    tree(-2.6, -5.2, 1.0, clumps=26)
+    tree(13.5, 3.0, 1.2)
+    tree(4.0, 14.0, 1.35)
+    tree(-9.0, 13.0, 1.25)
+    tree(19.0, -4.0, 1.0)
+
     # rolling fields beyond, with hedgerow trees
-    for hy, hz, hx in ((44, -7, -12), (60, -5, 24), (82, -2, -30)):
-        blob('hill', 26, (hx, hy, hz), 'grass', scale=(2.8, 1, 0.42), strength=0.04, sub=4)
-    for i in range(46):
-        px = random.uniform(-60, 60); py = random.uniform(24, 62)
-        r = random.uniform(1.2, 2.6)
-        blob('far_tree', r, (px, py, r * 0.9 + (py - 24) * 0.06), 'hedge', strength=0.4, noise_scale=0.4, sub=2)
+    for hy, hz, hx in ((60, -9, -20), (85, -8, 30), (120, -6, -40)):
+        blob('hill', 30, (hx, hy, hz), 'field', scale=(3.4, 1.2, 0.42), strength=0.03, sub=4)
+    for i in range(60):
+        px = random.uniform(-90, 90); py = random.uniform(30, 90)
+        r = random.uniform(1.3, 2.8)
+        blob('far_tree', r, (px, py, r * 0.8 + max(0, py - 45) * 0.05), 'hedge', strength=0.4, noise_scale=0.4, sub=2)
 
 def build_world():
-    w = bpy.data.worlds.new('dusk'); scene.world = w; w.use_nodes = True
+    w = bpy.data.worlds.new('evening'); scene.world = w; w.use_nodes = True
     nt = w.node_tree
     bg = nt.nodes['Background']
     sky = nt.nodes.new('ShaderNodeTexSky')
     sky.sky_type = 'NISHITA'
-    sky.sun_elevation = math.radians(3.0)
-    sky.sun_rotation = math.radians(250)
-    sky.sun_intensity = 0.6
-    sky.air_density = 1.6; sky.dust_density = 2.5; sky.ozone_density = 3.0
+    sky.sun_elevation = math.radians(9)
+    sky.sun_rotation = math.radians(float(arg('--sun', '212')))        # low in the front-left, so the façade is lit and modelled
+    sky.sun_intensity = 0.55
+    sky.sun_size = math.radians(4)              # a soft sun: gentle shadow edges
+    sky.air_density = 1.8; sky.dust_density = 3.5; sky.ozone_density = 2.5
     nt.links.new(sky.outputs[0], bg.inputs[0])
-    bg.inputs[1].default_value = 0.3
-    # a soft cool fill from the front so the façade is readable in the half-light
-    fill = bpy.data.lights.new('fill', 'AREA'); fill.energy = 2200; fill.size = 18; fill.color = (0.72, 0.78, 1.0)
-    fo = bpy.data.objects.new('fill', fill); fo.location = (-9, -16, 11); col.objects.link(fo)
-    fo.rotation_euler = (math.radians(58), 0, math.radians(-30))
+    bg.inputs[1].default_value = 0.16
 
 def setup_camera():
-    cam = bpy.data.cameras.new('cam'); cam.lens = 38; cam.sensor_width = 36
+    cam = bpy.data.cameras.new('cam'); cam.lens = 37; cam.sensor_width = 36
     co = bpy.data.objects.new('cam', cam); col.objects.link(co)
-    co.location = (10.2, -21.5, 4.9)
-    target = Vector((0.3, 2.0, 3.9))
+    co.location = (9.6, -16.5, 3.4)
+    target = Vector((2.6, 1.0, 4.0))
     co.rotation_euler = (target - co.location).to_track_quat('-Z', 'Y').to_euler()
     scene.camera = co
-    cam.dof.use_dof = True; cam.dof.focus_distance = (target - co.location).length; cam.dof.aperture_fstop = 5.6
+    cam.dof.use_dof = True; cam.dof.focus_distance = (target - co.location).length; cam.dof.aperture_fstop = 4.0
+
+def setup_grade():
+    """Bloom on the lamps and windows, a touch of vignette."""
+    scene.use_nodes = True
+    nt = scene.node_tree
+    rl = nt.nodes['Render Layers']; comp = nt.nodes['Composite']
+    glare = nt.nodes.new('CompositorNodeGlare'); glare.glare_type = 'FOG_GLOW'; glare.quality = 'HIGH'; glare.threshold = 1.2; glare.size = 8; glare.mix = -0.6
+    bpy.context.view_layer.use_pass_mist = True
+    scene.world.mist_settings.start = 22; scene.world.mist_settings.depth = 110; scene.world.mist_settings.falloff = 'QUADRATIC'
+    haze = nt.nodes.new('CompositorNodeMixRGB'); haze.blend_type = 'MIX'
+    haze.inputs[2].default_value = (1.0, 0.72, 0.5, 1)
+    scale = nt.nodes.new('CompositorNodeMath'); scale.operation = 'MULTIPLY'; scale.inputs[1].default_value = 0.6
+    nt.links.new(rl.outputs['Mist'], scale.inputs[0])
+    nt.links.new(scale.outputs[0], haze.inputs[0])
+    nt.links.new(rl.outputs['Image'], haze.inputs[1])
+    nt.links.new(haze.outputs[0], glare.inputs[0])
+    nt.links.new(glare.outputs[0], comp.inputs[0])
 
 build_house()
 build_garden()
 build_world()
 setup_camera()
+setup_grade()
 
 # bevel-friendly shading on the hard-surface pieces
 for o in col.objects:
@@ -561,7 +640,7 @@ if out:
     scene.render.resolution_x = w; scene.render.resolution_y = h
     scene.view_settings.view_transform = 'Filmic'
     scene.view_settings.look = 'Medium High Contrast'
-    scene.view_settings.exposure = float(arg('--exposure', '1.2'))
+    scene.view_settings.exposure = float(arg('--exposure', '0.2'))
     scene.render.filepath = out
     bpy.ops.render.render(write_still=True)
     print('RENDERED', out)
