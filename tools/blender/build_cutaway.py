@@ -95,7 +95,7 @@ def smoke_mat():
     m = bpy.data.materials.new('smoke'); m.use_nodes = True
     nt = m.node_tree; nt.nodes.clear()
     out = nt.nodes.new('ShaderNodeOutputMaterial'); vol = nt.nodes.new('ShaderNodeVolumePrincipled')
-    vol.inputs['Color'].default_value = (0.9, 0.86, 0.82, 1); vol.inputs['Density'].default_value = 5.0
+    vol.inputs['Color'].default_value = (0.9, 0.86, 0.82, 1); vol.inputs['Density'].default_value = 7.0
     nt.links.new(vol.outputs[0], out.inputs['Volume'])
     return m
 
@@ -116,6 +116,8 @@ MAT = {
     'soil': mottled('soil', 0x33261e, 0x4a382c, scale=60, bump=0.6),
     'flag': tiles('flag', 0x8f8a80, 0xa39d92, 0x55524c, 0.9, 0.6, wall=False, bump=0.4, gap=0.015),
     'smoke': smoke_mat(),
+    'church': mottled('church', 0xa89a82, 0xc9bca4, scale=1.5, bump=0.3, rough=0.9),
+    'yew': mottled('yew', 0x16301c, 0x24482a, scale=20, bump=0.5, rough=0.9),
 }
 CUT = 0xeee4d2      # the sliced edge of walls and floors
 WHITE = 0xf3efe6
@@ -281,9 +283,9 @@ def shell():
     box(0.72, 0.38, 1.57, 'brick', at=(cx, top - 0.38, 0.5), r=0, parent=g)
     box(0.84, 0.1, 1.7, 'stone', at=(cx, top, 0.5), r=0.02, parent=g)
     for pz in (0.1, 0.9): prop('chimney_pot', at=(cx, top + 0.1, pz), parent=g)
-    for k in range(9):                                # smoke drifting up and away on the breeze
-        t = k / 8
-        ball(0.2 + t * 0.55, 'smoke', at=(cx + 0.15 + t * t * 2.6 + random.uniform(-0.1, 0.1), top + 0.75 + t * 3.4, 0.9 + random.uniform(-0.15, 0.15) - t * 0.5), scale=(1.2, 0.9, 1.0), parent=g, sub=2)
+    for k in range(16):                               # smoke curling up and drifting off on the breeze
+        t = k / 15
+        ball(0.18 + t * 0.6, 'smoke', at=(cx + 0.1 + t * t * 3.4 + random.uniform(-0.12, 0.12), top + 0.7 + t * 2.3 + math.sin(t * 5) * 0.12, 0.9 + random.uniform(-0.15, 0.15) - t * 0.4), scale=(1.25, 0.85, 1.0), parent=g, sub=2)
 
     # the left-hand outside wall, which the camera does see: two windows and a climber
     for i, wy in enumerate((Y0[0] + 1.6, Y0[1] + 1.55)):
@@ -623,7 +625,7 @@ def garden():
     border(-12, -5.2, 4.0, 1.2); border(5.6, 12, 4.0, 1.2)
     border(-13.5, -1.4, 10.8, 0.8); border(1.4, 13.5, 10.8, 0.8)
     # trees, shrubs, a hedge of leaves on the right
-    for (tx, tz, sc, ry) in ((-9.0, -1.5, 1.15, 0.3), (10.5, -4.5, 1.3, 2.0), (-13, 7, 0.9, 4.0), (13.5, 6.5, 1.0, 1.2), (-2, -13, 1.4, 5.0), (7, -15, 1.25, 0.8)):
+    for (tx, tz, sc, ry) in ((-9.0, -1.5, 1.15, 0.3), (13.0, 1.5, 1.2, 2.0), (-13, 7, 0.9, 4.0), (13.5, 6.5, 1.0, 1.2), (-2, -13, 1.4, 5.0), (7, -15, 1.25, 0.8)):
         prop('tree', at=(tx, 0, tz), ry=ry, scale=sc, parent=g)
     prop('shrub', at=(-5.6, 0, 2.6), parent=g); prop('shrub', at=(6.6, 0, 1.2), scale=0.8, ry=1.0, parent=g)
     for k in range(3): cyl(0.2 - k * 0.0, 0.15, 0.34, 0xb5633f, at=(-4.9 + k * 0.0 + (9.6 if k == 1 else 0) - (0.9 if k == 2 else 0), 0.06, 3.0 + (0.6 if k == 2 else 0)), seg=18, parent=g)
@@ -637,20 +639,83 @@ def garden():
     # fields rolling away, hedgerows, distant trees
     for (hx, hz, hy, sx_) in ((-25, -70, -9, 3.6), (35, -95, -8, 3.4), (-45, -130, -6, 4.2)):
         ball(30, 'field', at=(hx, hy, hz), scale=(sx_, 0.42, 1.3), parent=g, sub=4)
-    for k in range(70):
-        px = random.uniform(-95, 95); pz = random.uniform(-100, -32); rr = random.uniform(1.4, 3.0)
-        ball(rr, 'hedge', at=(px, rr * 0.8 + max(0, -pz - 50) * 0.05, pz), scale=(1, 1.1, 1), parent=g, sub=2)
-    for k in range(40):   # a hedgerow line
-        ball(0.9, 'hedge', at=(-40 + k * 2.0, 0.7, -26 + math.sin(k * 0.3) * 2), scale=(1.3, 0.9, 0.9), parent=g, sub=2)
+    for k in range(26):
+        px = random.uniform(-80, 80); pz = random.uniform(-70, -24)
+        if 18 < px < 70 and -92 < pz < -26: continue          # keep the churchyard clear
+        prop('tree', at=(px, max(0, -pz - 50) * 0.03, pz), ry=random.uniform(0, 6.28), scale=random.uniform(1.1, 1.9), parent=g)
+    for k in range(60):
+        px = random.uniform(-130, 130); pz = random.uniform(-150, -80); rr = random.uniform(2.5, 4.5)
+        leafy(rr, (px, rr * 0.8 + (-pz - 60) * 0.05, pz), mat='hedge', leaf=0.7, count=120, scale=(1, 1.1, 1), parent=g)
+    for k in range(60):   # hedgerows dividing the fields
+        leafy(1.0, (-60 + k * 2.0, 0.8, -22 + math.sin(k * 0.3) * 2), mat='hedge', leaf=0.22, count=110, scale=(1.3, 0.9, 0.9), parent=g)
+        leafy(1.0, (-22 + math.sin(k * 0.2) * 3, 0.8 + k * 0.03, -24 - k * 1.6), mat='hedge', leaf=0.25, count=90, scale=(0.9, 0.9, 1.3), parent=g)
+
+def church(at=(44, 0, -68), ry=2.2):
+    """A village church across the fields: nave, chancel, and a square tower with a short spire."""
+    c = group(None, at=at, ry=ry)
+    stone = 'church'
+    # nave and chancel with slate roofs
+    for (w, h, d, z, rise) in ((8, 6.5, 17, 0, 3.6), (6, 5, 7, -12, 2.8)):
+        box(w, h, d, stone, at=(0, 0, z), r=0.03, parent=c)
+        prism([(-w / 2 - 0.3, 0), (w / 2 + 0.3, 0), (0, rise)], d + 0.5, 'slate', at=(0, h, z + d / 2 + 0.25), parent=c)
+        prism([(-w / 2, 0), (w / 2, 0), (0, rise - 0.2)], 0.3, stone, at=(0, h, z + d / 2), parent=c)
+    # buttresses and lancet windows glowing along both sides
+    for s_ in (-1, 1):
+        for k in range(5):
+            z = -6.2 + k * 3.1
+            box(0.5, 4.6, 0.8, stone, at=(s_ * 4.2, 0, z + 1.55), r=0.03, parent=c)
+            box(0.06, 2.6, 0.9, 0xffd08a, at=(s_ * 4.02, 2.0, z), r=0, parent=c, emit=0xffb860, glow=5)
+            cyl(0.001, 0.45, 0.8, 0xffd08a, at=(s_ * 4.02, 4.6, z), seg=4, rz=0, ry=math.pi / 4, parent=c, emit=0xffb860, glow=5)
+    # tower
+    t = group(c, at=(0, 0, 11))
+    box(5.6, 15, 5.6, stone, at=(0, 0, 0), r=0.04, parent=t)
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            box(1.0, 11, 1.0, stone, at=(sx * 2.7, 0, sz * 2.7), r=0.04, parent=t)
+            box(0.6, 1.6, 0.6, stone, at=(sx * 2.6, 15, sz * 2.6), r=0.03, parent=t); cyl(0.001, 0.42, 1.0, stone, at=(sx * 2.6, 16.6, sz * 2.6), seg=4, ry=math.pi / 4, parent=t)
+    for k in range(5):
+        for (ax, az) in ((1, 0), (0, 1)):
+            for sgn in (-1, 1):
+                off = -2.0 + k * 1.0
+                box(0.55 if ax == 0 else 0.3, 0.7, 0.3 if ax == 0 else 0.55, stone, at=(sgn * 2.75 if ax else off, 15, off if ax else sgn * 2.75), r=0.02, parent=t)
+    cyl(0.001, 2.6, 5.5, 'slate', at=(0, 15, 0), seg=4, ry=math.pi / 4, parent=t)
+    cyl(0.03, 0.03, 1.2, 0xc9a25a, at=(0, 20.5, 0), seg=6, parent=t, metal=1.0, rough=0.3)
+    for (ax, sgn) in ((0, 1), (1, 1), (1, -1)):
+        px, pz = (0, sgn * 2.83) if ax == 0 else (sgn * 2.83, 0)
+        box(1.0 if ax == 0 else 0.06, 2.4, 0.06 if ax == 0 else 1.0, 0x1a1c22, at=(px, 11.6, pz), r=0, parent=t)          # belfry louvres
+        cyl(0.95, 0.95, 0.08, 0xf1ece2, at=(px, 9.2, pz), rx=math.pi / 2 if ax == 0 else 0, rz=0 if ax == 0 else math.pi / 2, seg=32, parent=t, centre=True, emit=0xffe2b0, glow=1.5)
+        box(1.1 if ax == 0 else 0.06, 3.0, 0.06 if ax == 0 else 1.1, 0xffd08a, at=(px, 3.6, pz), r=0, parent=t, emit=0xffb860, glow=5)
+    box(1.7, 2.8, 0.2, 0x3a2418, at=(0, 0, 2.85), r=0.04, parent=t)
+    # churchyard: wall, yews, a few headstones
+    for (w, x, z, r_) in ((26, 0, 17, 0), (26, 0, -19, 0), (36, -13, -1, math.pi / 2), (36, 13, -1, math.pi / 2)):
+        box(w, 1.0, 0.4, stone, at=(x, 0, z), ry=r_, r=0.05, parent=c)
+    for (yx, yz, ys) in ((-9, 12, 1.0), (9, 9, 1.2), (-10, -8, 0.9), (10, -12, 1.1), (7, 15, 0.8)):
+        for k in range(5):
+            tt = k / 4
+            leafy(2.0 * ys * (1 - tt * 0.7), (yx, (1.2 + tt * 4.2) * ys, yz), mat='yew', leaf=0.3, count=160, scale=(1, 1.2, 1), parent=c)
+    for k in range(14):
+        box(0.6, random.uniform(0.8, 1.2), 0.14, stone, at=(random.uniform(-11, 11), 0, random.uniform(3, 15)), ry=random.uniform(-0.2, 0.2), rz=random.uniform(-0.06, 0.06), r=0.06, parent=c)
 
 def world():
     w = bpy.data.worlds.new('evening'); scene.world = w; w.use_nodes = True
     nt = w.node_tree; bg = nt.nodes['Background']
     sky = nt.nodes.new('ShaderNodeTexSky'); sky.sky_type = 'NISHITA'
-    sky.sun_elevation = math.radians(7); sky.sun_rotation = math.radians(float(arg('--sun', '140')))
+    sky.sun_elevation = math.radians(6); sky.sun_rotation = math.radians(float(arg('--sun', '140')))
     sky.sun_intensity = 0.5; sky.sun_size = math.radians(5)
     sky.air_density = 1.8; sky.dust_density = 3.0; sky.ozone_density = 2.5
-    nt.links.new(sky.outputs[0], bg.inputs[0]); bg.inputs[1].default_value = 0.16
+    # streaks of cloud catching the last light, strongest low in the sky
+    tc = nt.nodes.new('ShaderNodeTexCoord'); mp = nt.nodes.new('ShaderNodeMapping'); mp.inputs['Scale'].default_value = (1.2, 1.2, 7.0)
+    noise = nt.nodes.new('ShaderNodeTexNoise'); noise.inputs['Scale'].default_value = 2.2; noise.inputs['Detail'].default_value = 8; noise.inputs['Roughness'].default_value = 0.6
+    ramp = nt.nodes.new('ShaderNodeValToRGB'); ramp.color_ramp.elements[0].position = 0.52; ramp.color_ramp.elements[1].position = 0.74
+    sep = nt.nodes.new('ShaderNodeSeparateXYZ'); band = nt.nodes.new('ShaderNodeMapRange')
+    band.inputs[1].default_value = 0.02; band.inputs[2].default_value = 0.3; band.inputs[3].default_value = 1.0; band.inputs[4].default_value = 0.0
+    mul = nt.nodes.new('ShaderNodeMath'); mul.operation = 'MULTIPLY'
+    mix = nt.nodes.new('ShaderNodeMix'); mix.data_type = 'RGBA'; mix.inputs[7].default_value = (2.2, 1.25, 0.8, 1)
+    nt.links.new(tc.outputs['Generated'], mp.inputs[0]); nt.links.new(mp.outputs[0], noise.inputs['Vector']); nt.links.new(noise.outputs['Fac'], ramp.inputs[0])
+    nt.links.new(tc.outputs['Generated'], sep.inputs[0]); nt.links.new(sep.outputs['Z'], band.inputs[0])
+    nt.links.new(ramp.outputs[0], mul.inputs[0]); nt.links.new(band.outputs[0], mul.inputs[1])
+    nt.links.new(mul.outputs[0], mix.inputs[0]); nt.links.new(sky.outputs[0], mix.inputs[6])
+    nt.links.new(mix.outputs[2], bg.inputs[0]); bg.inputs[1].default_value = 0.16
 
 def camera():
     cam = bpy.data.cameras.new('cam'); cam.lens = 50; cam.sensor_width = 36
@@ -673,6 +738,7 @@ def grade():
     glare = nt.nodes.new('CompositorNodeGlare'); glare.glare_type = 'FOG_GLOW'; glare.quality = 'HIGH'; glare.threshold = 1.5; glare.size = 7; glare.mix = -0.7
     nt.links.new(haze.outputs[0], glare.inputs[0]); nt.links.new(glare.outputs[0], comp.inputs[0])
 
+church()
 house = shell()
 games(house); office(house); studio(house)
 garden(); world(); camera(); grade()
