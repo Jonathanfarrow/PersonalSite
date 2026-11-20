@@ -70,7 +70,7 @@ def make_materials():
     make_material("pot", "#EEEAE0", 0.22)
     make_material("stem", "#5A3F28", 0.85)
     make_material("leaves", "#1E5A2B", 0.32)
-    make_material("shrub", "#A8B83A", 0.85)
+    make_material("shrub", "#9EAE38", 0.85)
     make_material("bark", "#4C3B2D", 0.92)
     make_material("leaves_tree", "#2B5A27", 0.85)
     make_material("iron", "#111113", 0.38, 0.2)
@@ -777,11 +777,11 @@ def build_beanbag():
         hmask = sin(pi * min(1.0, p.z / 0.602)) ** 0.5 if p.z > 0 else 0.0
         # six sewn panels: pinched seams, slightly bulging panels
         d = ((th + pi / 6) % (pi / 3)) - pi / 6
-        k = 1 - 0.035 * math.exp(-(d / 0.07) ** 2) * hmask + 0.012 * cos(6 * th) * hmask
+        k = 1 - 0.055 * math.exp(-(d / 0.06) ** 2) * hmask + 0.015 * cos(6 * th) * hmask
         # soft diagonal sag folds round the lower half
         low = max(0.0, 1 - p.z / 0.34) * min(1.0, p.z / 0.04)
         fold = max(0.0, sin(th * 7 + p.z * 16 + 2.5 * noise.noise(Vector((p.x * 3, p.y * 3, p.z * 3))))) ** 2
-        k -= 0.035 * fold * low
+        k -= 0.05 * fold * low
         k += 0.03 * noise.noise(p * 2.6 + Vector((3, 1, 7))) * hmask
         p.x, p.y = p.x * k, p.y * k
         # slump: the top leans back
@@ -790,15 +790,15 @@ def build_beanbag():
         w = p - C
         dist = w.length
         if dist < RC:
-            p = C + w / dist * (dist + (RC - dist) * 0.92)
+            p = C + w / dist * (dist + RC * 0.72 * (1 - dist / RC) ** 1.35)
         # wrinkles radiating from the dent
         wr = noise.noise(Vector((th * 2.2, p.z * 9, 1.7)))
-        p -= rad.normalized() * 0.010 * (1 - min(1.0, abs(wr) * 4)) ** 2 * hmask if rad.length > 1e-6 else Vector()
+        p -= rad.normalized() * 0.022 * (1 - min(1.0, abs(wr) * 3)) ** 2 * hmask if rad.length > 1e-6 else Vector()
         v.co = p
     bm = bmesh.new()
     bm.from_mesh(me)
-    bmesh.ops.smooth_vert(bm, verts=bm.verts, factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
-    bmesh.ops.smooth_vert(bm, verts=bm.verts, factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
+    for _ in range(3):
+        bmesh.ops.smooth_vert(bm, verts=bm.verts, factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
     xs = [v.co.x for v in bm.verts]
     ys = [v.co.y for v in bm.verts]
     zs = [v.co.z for v in bm.verts]
@@ -946,7 +946,7 @@ def build_plant():
             top = (k == nleaf - 1)
             elev = 68 if top else rnd.uniform(18, 40) + 14 * f
             L = (0.24 if top else rnd.uniform(0.32, 0.39)) * (1.0 - 0.15 * f)
-            W = L * rnd.uniform(0.29, 0.33)
+            W = L * rnd.uniform(0.33, 0.38)
             leaf = make_leaf(L, W, fold=rnd.uniform(0.25, 0.38), droop=0.08 if top else rnd.uniform(0.16, 0.28))
             pet = 0.045
             m = Matrix.Translation(p) @ R(phi - 90, "Z") @ R(elev, "X")
@@ -979,7 +979,7 @@ def build_shrub():
         big = noise.noise(Vector((c * 1.5, sn * 1.5, h * 4.0)))
         # billows: cells sheared upwards so they read as sprays of foliage
         q = Vector((c * 4.2, sn * 4.2, h * 9.0 - 1.6 * radius(h)))
-        cell = 1 - min(1.0, noise.cell_vector(q * 1.0).length) if False else abs(noise.noise(q))
+        cell = abs(noise.noise(q))
         lump = (1 - cell * 2.0)
         lump = max(-1.0, lump)
         r = radius(h) * (1 + 0.16 * big + 0.13 * lump)
@@ -997,7 +997,7 @@ def build_shrub():
         for v in bm.verts:                 # teardrop: fat low down, soft tip
             d = v.co.normalized()
             t = (d.z + 1) / 2
-            w = (sin(pi * t ** 0.62) ** 0.75) if 0 < t < 1 else 0.0
+            w = 1.75 * t ** 0.4 * (1 - t) ** 0.62 if 0 < t < 1 else 0.0
             hxy = max(1e-6, sqrt(d.x * d.x + d.y * d.y))
             v.co = Vector((d.x / hxy * w * 0.62, d.y / hxy * w * 0.62, t * 1.7 - 0.5))
         tuft = obj_from_bm(bm, "tuft", "shrub", None)
