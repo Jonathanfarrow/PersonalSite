@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { plane, liveScreen, dawPainter, codePainter, attractPainter, marqueeTexture, scopePainter, puffTexture } from './screens.js';
+import { plane, liveScreen, dawPainter, codePainter, attractPainter, marqueeTexture, scopePainter, puffTexture, canvasTexture, rng } from './screens.js';
 
 // Layout shared with tools/blender/build_cutaway.py (metres, y up, z toward the viewer).
 export const DIM = { W: 8, D: 5, FLOOR: 3.2, SLAB: 0.25, WALL: 0.25, KNEE: 1.0, APEX: 4.09 };
@@ -13,7 +13,7 @@ export const ROOMS = [
     { id: 'office', y: FLOORS[1] + 0.04, height: 2.95 },
     { id: 'studio', y: FLOORS[2] + 0.04, height: DIM.APEX },
 ];
-const RECORD_SLOTS = [[0.04, 3.05], [-0.48, 2.3], [0.48, 2.3], [-0.95, 1.55], [0, 1.55], [0.95, 1.55]];
+const RECORD_SLOTS = [[-0.48, 2.3], [0.48, 2.3], [-0.95, 1.55], [0, 1.55], [0.95, 1.55], [0.18, 3.05]];
 
 const MODELS = 'src/assets/models/';
 
@@ -30,8 +30,8 @@ function hotspot(parent, id, label, at, size, pipAt) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), new THREE.MeshBasicMaterial({ visible: false }));
     mesh.position.set(...at);
     mesh.userData.hotspot = { id, label };
-    const pip = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 2.4, 2.4) }));
-    const halo = new THREE.Mesh(new THREE.RingGeometry(0.07, 0.085, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 }));
+    const pip = new THREE.Mesh(new THREE.SphereGeometry(0.065, 14, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 2.4, 2.4) }));
+    const halo = new THREE.Mesh(new THREE.RingGeometry(0.1, 0.122, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 }));
     pip.add(halo);
     pip.position.set(...(pipAt ?? [0, size[1] / 2 + 0.22, size[2] / 2]));
     pip.userData.pip = { baseY: pip.position.y, phase: Math.random() * 6 };
@@ -83,14 +83,32 @@ export async function buildHouse(scene, site) {
         scene.add(mesh);
     }
 
-    // ---- sky rendered from the same Blender world
-    new THREE.TextureLoader().load(MODELS + 'sky.jpg', (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.mapping = THREE.EquirectangularReflectionMapping;
-        scene.background = tex;
-        scene.backgroundRotation.y = Math.PI / 2;
-    });
-    scene.background = new THREE.Color(0x8a8378);
+    // ---- evening sky: blue-grey overhead, warming to peach at the horizon, with streaks of cloud
+    const sky = canvasTexture(1024, 512, (ctx, w, h) => {
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, '#4f6480');
+        grad.addColorStop(0.3, '#8291a0');
+        grad.addColorStop(0.44, '#c9b9a8');
+        grad.addColorStop(0.5, '#f3cfa2');
+        grad.addColorStop(0.505, '#b9a48f');
+        grad.addColorStop(1, '#b9a48f');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        const rand = rng('clouds');
+        for (let i = 0; i < 70; i++) {
+            const x = rand() * w, y = h * (0.2 + rand() * 0.27), rx = 40 + rand() * 90, ry = 4 + rand() * 9;
+            const g = ctx.createRadialGradient(x, y, 0, x, y, rx);
+            g.addColorStop(0, `rgba(255,214,180,${0.1 + rand() * 0.16})`);
+            g.addColorStop(1, 'rgba(255,214,180,0)');
+            ctx.save();
+            ctx.translate(x, y); ctx.scale(1, ry / rx); ctx.translate(-x, -y);
+            ctx.fillStyle = g;
+            ctx.fillRect(x - rx, y - rx, rx * 2, rx * 2);
+            ctx.restore();
+        }
+    }).tex;
+    sky.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = sky;
 
     // ---- chimney smoke
     const smokeTex = puffTexture('rgba(235,225,215,0.55)', 'rgba(235,225,215,0)');
@@ -148,7 +166,7 @@ export async function buildHouse(scene, site) {
         (site.studio.tracks ?? []).slice(0, RECORD_SLOTS.length).forEach((track, i) => {
             const [x, y] = RECORD_SLOTS[i];
             const label = track.artist ? `${track.title} · ${track.artist}` : track.title;
-            studio.spots.push(hotspot(studio.root, `track:${i}`, label, [x + (i === 0 ? 0.04 : 0), y, -2.38], [0.8, 0.8, 0.14], [0, 0.5, 0.1]));
+            studio.spots.push(hotspot(studio.root, `track:${i}`, label, [x, y, -2.38], [0.8, 0.8, 0.14], [0, 0.5, 0.1]));
         });
     }
 
