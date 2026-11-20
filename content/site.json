@@ -1,0 +1,109 @@
+{
+  "name": "Jonathan Farrow",
+  "tagline": "I build software, make music and tinker with games. Come in and have a look around.",
+  "about": {
+    "photo": "src/assets/me.jpg",
+    "bio": [
+      "I'm an engineer with a deep interest in both hardware and software systems. My work explores the intersection of these technologies and their broader impact on society.",
+      "I'm particularly fascinated by how these systems shape and influence our world. This building is where I keep the things I've made: the music upstairs, the work in the office, and the games on the ground floor."
+    ],
+    "links": [
+      {
+        "label": "GitHub",
+        "url": "https://github.com/Jonathanfarrow"
+      },
+      {
+        "label": "Twitter",
+        "url": "https://twitter.com/farrow_jonny"
+      },
+      {
+        "label": "LinkedIn",
+        "url": "https://de.linkedin.com/in/jonathan-farrow-9747b7bb"
+      },
+      {
+        "label": "Email",
+        "url": "mailto:jonathanjamesf@gmail.com"
+      }
+    ]
+  },
+  "studio": {
+    "floor": "The loft",
+    "title": "The Studio",
+    "intro": "Records from the wall. Pick one to listen.",
+    "tracks": [
+      {
+        "title": "Every Breath Is a Sigh",
+        "artist": "Lomas",
+        "year": "",
+        "note": "",
+        "spotify": "0SBtdsKpMHDzG9y1I1tsUn",
+        "url": "https://open.spotify.com/track/0SBtdsKpMHDzG9y1I1tsUn",
+        "audio": "",
+        "cover": "",
+        "sleeve": "mono"
+      }
+    ]
+  },
+  "office": {
+    "floor": "First floor",
+    "title": "The Office",
+    "intro": "Things I've built and shipped, plus the writing that came out of it.",
+    "projects": [
+      {
+        "title": "Project one",
+        "role": "",
+        "period": "",
+        "description": "Placeholder. Describe what it was, what you did and what came of it in content/site.json.",
+        "tags": [],
+        "url": ""
+      },
+      {
+        "title": "Project two",
+        "role": "",
+        "period": "",
+        "description": "Placeholder. \"role\", \"period\" and \"tags\" show as small labels; \"url\" adds a link.",
+        "tags": [],
+        "url": ""
+      },
+      {
+        "title": "Project three",
+        "role": "",
+        "period": "",
+        "description": "Placeholder. Add or remove entries freely; the list grows to fit.",
+        "tags": [],
+        "url": ""
+      }
+    ]
+  },
+  "games": {
+    "floor": "Ground floor",
+    "title": "The Games Room",
+    "intro": "Games in progress. Every cabinet in the room is one of them.",
+    "games": [
+      {
+        "title": "Game one",
+        "status": "In development",
+        "description": "Placeholder. Say what the game is and where it's up to in content/site.json.",
+        "image": "",
+        "playUrl": "",
+        "url": ""
+      },
+      {
+        "title": "Game two",
+        "status": "Prototype",
+        "description": "Placeholder. Set \"image\" to a screenshot path and it shows here and on the cabinet screen.",
+        "image": "",
+        "playUrl": "",
+        "url": ""
+      },
+      {
+        "title": "Game three",
+        "status": "Idea",
+        "description": "Placeholder. \"playUrl\" adds a Play button; \"url\" links to the source or a devlog.",
+        "image": "",
+        "playUrl": "",
+        "url": ""
+      }
+    ]
+  }
+}
