@@ -217,6 +217,7 @@ def prop(name, at=(0, 0, 0), ry=0.0, scale=1.0, colors=None, parent=None, rx=0.0
             c = m.copy(); c.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (*srgb(colors[m.name.split('.')[0]]), 1)
             o.data.materials[i] = c
     o.location = T(at); o.rotation_euler = (rx, 0, ry); o.scale = (scale,) * 3
+    o['prop'] = name
     return _link(o, parent)
 
 # ============================================================== house shell
@@ -285,7 +286,7 @@ def shell():
     for pz in (0.1, 0.9): prop('chimney_pot', at=(cx, top + 0.1, pz), parent=g)
     for k in range(16):                               # smoke curling up and drifting off on the breeze
         t = k / 15
-        ball(0.18 + t * 0.6, 'smoke', at=(cx + 0.1 + t * t * 3.4 + random.uniform(-0.12, 0.12), top + 0.7 + t * 2.3 + math.sin(t * 5) * 0.12, 0.9 + random.uniform(-0.15, 0.15) - t * 0.4), scale=(1.25, 0.85, 1.0), parent=g, sub=2)
+        ball(0.18 + t * 0.6, 'smoke', at=(cx + 0.1 + t * t * 3.4 + random.uniform(-0.12, 0.12), top + 0.7 + t * 2.3 + math.sin(t * 5) * 0.12, 0.9 + random.uniform(-0.15, 0.15) - t * 0.4), scale=(1.25, 0.85, 1.0), parent=g, sub=2)['smoke'] = 1
 
     # the left-hand outside wall, which the camera does see: two windows and a climber
     for i, wy in enumerate((Y0[0] + 1.6, Y0[1] + 1.55)):
@@ -594,11 +595,14 @@ def studio(g):
 # ============================================================== garden & countryside
 def garden():
     g = group()
-    box(160, 0.2, 160, 'grass', at=(0, -0.2, -20), r=0, parent=g)
+    # ground: a fine grid near the house (so baked light and shadow read) inside a coarse one
+    for (size, cells, yoff) in ((44, 110, 0.0), (320, 70, -0.03)):
+        bm = bmesh.new(); bmesh.ops.create_grid(bm, x_segments=cells, y_segments=cells, size=size / 2)
+        o = _mesh('ground', bm, MAT['grass'], smooth=False); o.location = T((0, yoff, 2 if size < 100 else -40)); _link(o, g)
     # flagstone terrace in front, a winding path to the gate
-    box(9.6, 0.06, 2.0, 'flag', at=(0, 0, 3.7), r=0.01, parent=g)
+    box(9.6, 0.06, 2.0, 'flag', at=(0, 0, 3.7), r=0.01, parent=g)['atlas'] = 1
     for k in range(9):
-        box(1.0, 0.05, 0.6, 'stone', at=(math.sin(k * 0.7) * 0.5, 0.0, 5.1 + k * 0.72), ry=random.uniform(-0.15, 0.15), r=0.02, parent=g)
+        box(1.0, 0.05, 0.6, 'stone', at=(math.sin(k * 0.7) * 0.5, 0.0, 5.1 + k * 0.72), ry=random.uniform(-0.15, 0.15), r=0.02, parent=g)['atlas'] = 1
     # picket fence with a gate, across the front
     for k in range(70):
         x = -14 + k * 0.4
@@ -649,6 +653,7 @@ def garden():
     for k in range(60):   # hedgerows dividing the fields
         leafy(1.0, (-60 + k * 2.0, 0.8, -22 + math.sin(k * 0.3) * 2), mat='hedge', leaf=0.22, count=110, scale=(1.3, 0.9, 0.9), parent=g)
         leafy(1.0, (-22 + math.sin(k * 0.2) * 3, 0.8 + k * 0.03, -24 - k * 1.6), mat='hedge', leaf=0.25, count=90, scale=(0.9, 0.9, 1.3), parent=g)
+    return g
 
 def church(at=(44, 0, -68), ry=2.2):
     """A village church across the fields: nave, chancel, and a square tower with a short spire."""
@@ -695,6 +700,7 @@ def church(at=(44, 0, -68), ry=2.2):
             leafy(2.0 * ys * (1 - tt * 0.7), (yx, (1.2 + tt * 4.2) * ys, yz), mat='yew', leaf=0.3, count=160, scale=(1, 1.2, 1), parent=c)
     for k in range(14):
         box(0.6, random.uniform(0.8, 1.2), 0.14, stone, at=(random.uniform(-11, 11), 0, random.uniform(3, 15)), ry=random.uniform(-0.2, 0.2), rz=random.uniform(-0.06, 0.06), r=0.06, parent=c)
+    return c
 
 def world():
     w = bpy.data.worlds.new('evening'); scene.world = w; w.use_nodes = True
@@ -738,10 +744,10 @@ def grade():
     glare = nt.nodes.new('CompositorNodeGlare'); glare.glare_type = 'FOG_GLOW'; glare.quality = 'HIGH'; glare.threshold = 1.5; glare.size = 7; glare.mix = -0.7
     nt.links.new(haze.outputs[0], glare.inputs[0]); nt.links.new(glare.outputs[0], comp.inputs[0])
 
-church()
+church_root = church()
 house = shell()
 games(house); office(house); studio(house)
-garden(); world(); camera(); grade()
+garden_root = garden(); world(); camera(); grade()
 
 out = arg('--render')
 if out:

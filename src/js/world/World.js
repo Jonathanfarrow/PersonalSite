@@ -1,23 +1,11 @@
-// Renderer, lights, post-processing, camera moves and picking for the 3D building.
+// Renderer, post-processing, camera moves and picking for the 3D house.
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { DIM, floorY, buildShell, buildStreet, buildSky } from './building.js';
-import { buildStudio, STUDIO_LOOK } from './studio.js';
-import { buildOffice, OFFICE_LOOK } from './office.js';
-import { buildGames, GAMES_LOOK } from './games.js';
-import { prop } from './props.js';
-
-// Bottom storey first.
-const ROOMS = [
-    { id: 'games', build: buildGames, look: GAMES_LOOK },
-    { id: 'office', build: buildOffice, look: OFFICE_LOOK },
-    { id: 'studio', build: buildStudio, look: STUDIO_LOOK },
-];
+import { DIM, buildHouse } from './house.js';
 
 const FOV = 30;
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -31,7 +19,7 @@ const FocusShader = {
         focusY: { value: 0.5 },
         focusHalf: { value: 0.5 },
         strength: { value: 0 },
-        vignette: { value: 0.35 },
+        vignette: { value: 0.3 },
     },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `
@@ -49,10 +37,8 @@ const FocusShader = {
                     float f = float(i);
                     float r = sqrt(f / 20.0) * radius;
                     float a = f * 2.39996;
-                    vec3 s = texture2D(tDiffuse, vUv + vec2(cos(a), sin(a)) * r / resolution).rgb;
-                    float w = 1.0 + dot(s, vec3(0.3333)) * 0.6;
-                    sum += s * w;
-                    total += w;
+                    sum += texture2D(tDiffuse, vUv + vec2(cos(a), sin(a)) * r / resolution).rgb;
+                    total += 1.0;
                 }
             }
             vec3 color = sum / total;
@@ -63,126 +49,72 @@ const FocusShader = {
 };
 
 export class World {
-    constructor(canvas, data, handlers = {}) {
+    /** Loads the model, then starts rendering. */
+    static async create(canvas, site, handlers = {}) {
+        const world = new World(canvas, handlers);
+        const built = await buildHouse(world.scene, site);
+        world.tick = built.tick;
+        world.rooms = built.rooms.map((room) => ({
+            ...room,
+            bounds: new THREE.Box3(
+                new THREE.Vector3(-DIM.W / 2, room.y, -DIM.D / 2),
+                new THREE.Vector3(DIM.W / 2, room.y + room.height, DIM.D / 2)
+            ),
+        }));
+        world.start();
+        return world;
+    }
+
+    constructor(canvas, handlers) {
         this.canvas = canvas;
         this.handlers = handlers;
         this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        // Phones and low-power machines skip the most expensive effect. ?quality=high|lite pins it.
+        // ?quality=high|lite pins the effects level; otherwise it adapts to the device.
         const pinned = new URLSearchParams(location.search).get('quality');
         this.lite = pinned ? pinned === 'lite'
             : window.matchMedia('(max-width: 899px), (pointer: coarse)').matches || (navigator.hardwareConcurrency ?? 8) <= 4;
         this.governor = pinned ? null : { level: 0, frames: 0, time: 0 };
-        this.current = null;      // room id or null for the whole building
+        this.current = null;      // room id, or null for the whole house
         this.insets = { left: 0, right: 0, top: 0, bottom: 0 };
         this.pointer = new THREE.Vector2(0, 0);
         this.parallax = new THREE.Vector2(0, 0);
         this.hovered = null;
         this.hoveredRoom = null;
-        this.tickers = [];
+        this.rooms = [];
 
         this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.lite ? 1.5 : 2));
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.05;
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.toneMapping = THREE.NoToneMapping;   // the bake is already graded
 
         this.scene = new THREE.Scene();
-        this.scene.fog = new THREE.Fog(0x1c2748, 45, 120);
-        this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 400);
+        this.scene.fog = new THREE.Fog(0xb9a48f, 90, 420);
+        this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 800);
         this.raycaster = new THREE.Raycaster();
 
-        this.build(data);
-        this.setupPost();
-        this.resize();
-        this.cam = this.viewFor(null);
-        this.tween = null;
-        this.applyCamera(this.cam);
-
-        // Nothing that casts a shadow moves, so the shadow maps are drawn once.
-        this.renderer.shadowMap.autoUpdate = false;
-        this.renderer.shadowMap.needsUpdate = true;
-
-        this.bind();
-        this.clock = new THREE.Clock();
-        this.renderer.setAnimationLoop(() => this.frame());
-    }
-
-    build(data) {
-        this.tickers.push(buildSky(this.scene).tick);
-        this.street = buildStreet(this.scene);
-        this.shell = buildShell(this.scene, ROOMS.map((r) => r.look));
-        this.tickers.push(this.shell.tick);
-        for (const [name, place] of Object.entries(this.street.group.userData.props)) prop(name, { ...place, parent: this.scene });
-        prop('cat', { at: this.shell.group.userData.catSpot, ry: -0.5, parent: this.scene });
-
-        this.scene.add(new THREE.HemisphereLight(0x8fa3e0, 0x1d1f2a, 0.5));
-        // Cool dusk light from the front-left; the rooms' own lamps are warm against it.
-        const moon = new THREE.DirectionalLight(0xa9bcff, 0.95);
-        moon.position.set(-10, 15, 16);
-        moon.target.position.set(3, 4.5, 0);
-        moon.castShadow = true;
-        moon.shadow.mapSize.set(4096, 4096);
-        Object.assign(moon.shadow.camera, { left: -16, right: 22, top: 12, bottom: -10, near: 1, far: 60 });
-        moon.shadow.bias = -0.0005;
-        moon.shadow.normalBias = 0.03;
-        moon.shadow.radius = 5;
-        this.scene.add(moon, moon.target);
-
-        this.rooms = ROOMS.map((def, i) => {
-            const y = floorY(i) + 0.04;
-            const built = def.build(this.scene, data[def.id] ?? {});
-            built.group.position.y = y;
-            if (built.tick) this.tickers.push(built.tick);
-
-            // Ceiling spot: the pool of light everything in the room sits in.
-            const spot = new THREE.SpotLight(def.look.light, 0, 12, 1.2, 1, 1.2);
-            spot.position.set(-0.4, y + 2.86, 1.9);
-            spot.target.position.set(0, y + 0.6, -1.6);
-            spot.castShadow = true;
-            spot.shadow.mapSize.set(1024, 1024);
-            spot.shadow.bias = -0.0015;
-            spot.shadow.normalBias = 0.02;
-            spot.shadow.radius = 6;
-            spot.shadow.camera.near = 0.3;
-            spot.shadow.camera.far = 9;
-            const fill = new THREE.PointLight(def.look.light, 0, 9, 1.5);
-            fill.position.set(0, y + 2.2, 0.2);
-            const accent = new THREE.PointLight(def.look.accent, 0, 7.5, 1.5);
-            accent.position.set(...(def.look.accentAt ?? [2.8, 1.2, 0.4]));
-            accent.position.y += y;
-            this.scene.add(spot, spot.target, fill, accent);
-
-            const bounds = new THREE.Box3(
-                new THREE.Vector3(-DIM.W / 2, y, -DIM.D / 2),
-                new THREE.Vector3(DIM.W / 2, y + DIM.FLOOR - DIM.SLAB, DIM.D / 2)
-            );
-            return { id: def.id, index: i, y, look: def.look, spots: built.spots, spot, fill, accent, bounds, lift: 0, power: 0 };
-        });
-    }
-
-    setupPost() {
         const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: this.lite ? 2 : 4 });
         this.composer = new EffectComposer(this.renderer, target);
         this.composer.addPass(new RenderPass(this.scene, this.camera));
-        if (!this.lite) {
-            this.ao = new GTAOPass(this.scene, this.camera, 1, 1);
-            this.ao.blendIntensity = 0.9;
-            this.ao.updateGtaoMaterial({ radius: 0.55, distanceExponent: 1.4, thickness: 1.2, scale: 1.15, samples: 12, screenSpaceRadius: false });
-            this.ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
-            this.composer.addPass(this.ao);
-        }
-        this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.26, 0.6, 1.0);
+        this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.22, 0.7, 0.88);
         this.composer.addPass(this.bloom);
         this.focus = new ShaderPass(FocusShader);
         this.composer.addPass(this.focus);
         this.composer.addPass(new OutputPass());
     }
 
+    start() {
+        this.resize();
+        this.cam = this.viewFor(null);
+        this.tween = null;
+        this.applyCamera(this.cam);
+        this.bind();
+        this.clock = new THREE.Clock();
+        this.renderer.setAnimationLoop(() => this.frame());
+    }
+
     // ---- camera -----------------------------------------------------------
 
-    /** Camera pose that frames a room (or the whole building) in the free part of the viewport. */
+    /** Camera pose that frames a room (or the whole house) in the free part of the viewport. */
     viewFor(roomId) {
         const { w, h } = this.size;
         const { left, right, top, bottom } = this.insets;
@@ -193,14 +125,12 @@ export class World {
 
         let target, boxW, boxH, az, el, depth;
         if (room) {
-            target = new THREE.Vector3(0, room.y + 1.38, -0.2);
-            boxW = DIM.W + 1.3; boxH = DIM.FLOOR + 0.25; az = -0.2; el = 0.12; depth = DIM.D / 2 + 0.2;
+            target = new THREE.Vector3(0, room.y + room.height / 2 - 0.05, -0.2);
+            boxW = DIM.W + 1.3; boxH = room.height + 0.4; az = -0.22; el = 0.11; depth = DIM.D / 2 + 0.2;
         } else {
-            // Wide screens also take in the house next door; narrow ones stay on this one.
-            const wideView = fw / fh > 1.05;
-            const topY = floorY(this.rooms.length) + 2.2;
-            target = new THREE.Vector3(wideView ? 2.6 : 0.5, topY / 2 - 0.3, 0);
-            boxW = DIM.W + (wideView ? 10 : 3.4); boxH = topY + 2.2; az = -0.44; el = 0.15; depth = DIM.D / 2;
+            const wide = fw / fh > 1.05;
+            target = new THREE.Vector3(wide ? 1.0 : 0.3, 6.0, 0);
+            boxW = wide ? 15 : 10.2; boxH = 13.6; az = -0.3; el = 0.1; depth = DIM.D / 2;
         }
         const dist = Math.max((boxH / 2) / (tan * (fh / h)), (boxW / 2) / (tan * (w / h) * (fw / w))) + depth;
         const pos = new THREE.Vector3(
@@ -233,7 +163,7 @@ export class World {
     }
 
     /**
-     * Fly to a room (null = the whole building). `insets` are the parts of the
+     * Fly to a room (null = the whole house). `insets` are the parts of the
      * viewport covered by UI, so the scene is framed in what is left.
      */
     goTo(roomId, insets = {}) {
@@ -255,25 +185,23 @@ export class World {
         this.moveTo(this.viewFor(roomId), sameRoom ? 0.8 : 1.25);
     }
 
-    /** First view: the building sits dark, the camera cranes down and the floors light up one by one. */
+    /** First view: the camera drifts down from above the rooftops and settles on the house. */
     opening(roomId) {
         const view = this.viewFor(roomId);
         if (this.reducedMotion || roomId) {
             this.cam = view;
-            this.rooms.forEach((r) => { r.powerAt = 0; });
             return;
         }
-        const offset = view.pos.clone().sub(view.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.55).multiplyScalar(1.3);
-        offset.y += 7;
-        this.cam = { pos: view.target.clone().add(offset), target: view.target.clone().add(new THREE.Vector3(0, 1.2, 0)), ox: view.ox, oy: view.oy };
-        this.moveTo(view, 3.4, easeOut);
-        this.rooms.forEach((r, i) => { r.powerAt = 0.55 + i * 0.45; });
+        const offset = view.pos.clone().sub(view.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.45).multiplyScalar(1.25);
+        offset.y += 6;
+        this.cam = { pos: view.target.clone().add(offset), target: view.target.clone().add(new THREE.Vector3(0, 1.0, 0)), ox: view.ox, oy: view.oy };
+        this.moveTo(view, 3.2, easeOut);
     }
 
-    /** Screen position (CSS px) of a room's label anchor. */
+    /** Screen position (CSS px) of a room's label anchor: the left edge of that floor. */
     labelPosition(roomId) {
         const room = this.rooms.find((r) => r.id === roomId);
-        const p = new THREE.Vector3(-DIM.W / 2 - DIM.WALL, room.y + 1.45, DIM.D / 2 - 0.4).project(this.camera);
+        const p = new THREE.Vector3(-DIM.W / 2 - DIM.WALL, room.y + Math.min(room.height, 2.9) / 2, DIM.D / 2).project(this.camera);
         return { x: (p.x * 0.5 + 0.5) * this.size.w, y: (-p.y * 0.5 + 0.5) * this.size.h };
     }
 
@@ -335,15 +263,8 @@ export class World {
             return;
         }
         const room = this.rooms.find((r) => r.id === this.current);
-        const hits = this.raycaster.intersectObjects(room.spots, true);
-        let spot = null;
-        for (const h of hits) {
-            let o = h.object;
-            if (o.userData.pip) continue;
-            while (o && !o.userData.hotspot) o = o.parent;
-            if (o) { spot = o; break; }
-        }
-        this.setHover(spot, e);
+        const hits = this.raycaster.intersectObjects(room.spots, false);
+        this.setHover(hits.length ? hits[0].object : null, e);
     }
 
     setHover(spot, e) {
@@ -376,10 +297,10 @@ export class World {
         const u = this.focus.uniforms;
         const room = this.rooms.find((r) => r.id === this.current);
         const toUv = (worldY) => new THREE.Vector3(0, worldY, DIM.D / 2).project(this.camera).y * 0.5 + 0.5;
-        const lo = toUv(room ? room.y - 0.1 : 0.2);
-        const hi = toUv(room ? room.y + DIM.FLOOR - 0.1 : floorY(this.rooms.length) + 2.4);
-        const half = (hi - lo) / 2 + (room ? 0.02 : 0.06);
-        const strength = (room ? 6 : 3) * this.renderer.getPixelRatio();
+        const lo = toUv(room ? room.y - 0.15 : 0.2);
+        const hi = toUv(room ? room.y + room.height + 0.1 : 12.5);
+        const half = (hi - lo) / 2 + (room ? 0.02 : 0.08);
+        const strength = (room ? 5 : 2.5) * this.renderer.getPixelRatio();
         const k = 1 - Math.exp(-dt * 5);
         u.focusY.value += ((lo + hi) / 2 - u.focusY.value) * k;
         u.focusHalf.value += (half - u.focusHalf.value) * k;
@@ -399,7 +320,7 @@ export class World {
         if (!slow) return;
         g.level++;
         if (g.level === 1) this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
-        if (g.level === 2 && this.ao) this.ao.enabled = false;
+        if (g.level === 2) this.bloom.enabled = false;
         if (g.level === 3) { this.renderer.setPixelRatio(1); this.focus.enabled = false; }
         this.composer.setPixelRatio(this.renderer.getPixelRatio());
         this.resize();
@@ -427,40 +348,24 @@ export class World {
         this.applyCamera(this.cam);
         this.updateFocus(dt);
 
-        if (this.started) this.sinceStart = (this.sinceStart ?? 0) + raw;
         for (const room of this.rooms) {
-            // Lights come on floor by floor, with a flicker as they catch.
-            if (room.powerAt !== undefined && this.sinceStart >= room.powerAt) {
-                const age = this.sinceStart - room.powerAt;
-                const flicker = age < 0.35 && !this.reducedMotion ? (Math.sin(age * 90) > 0 ? 1 : 0.25) : 1;
-                room.power = Math.min(age / 0.12, 1) * flicker;
-            }
-            // The room you point at (or stand in) glows a little brighter.
-            const lit = room === this.hoveredRoom || room.id === this.current ? 1 : 0;
-            room.lift += (lit - room.lift) * (1 - Math.exp(-dt * 8));
-            const level = room.power * (1 + room.lift * 0.3);
-            room.spot.intensity = (room.look.spot ?? 36) * level;
-            room.fill.intensity = (room.look.fill ?? 5) * level;
-            room.accent.intensity = (room.look.accentPower ?? 10) * room.power * (1 + room.lift * 0.5);
-
             const showPips = room.id === this.current && !this.tween;
             for (const spot of room.spots) {
-                const s = spot.userData;
-                s.hover = (s.hover ?? 0) + ((spot === this.hovered ? 1 : 0) - (s.hover ?? 0)) * (1 - Math.exp(-dt * 12));
-                spot.scale.setScalar(1 + s.hover * 0.035);
-                const pip = s.pip;
+                const pip = spot.userData.pip;
                 pip.visible = showPips;
-                if (showPips) {
-                    const phase = (time * 0.8 + pip.userData.pip.phase) % 1;
-                    pip.position.y = pip.userData.pip.baseY + (this.reducedMotion ? 0 : Math.sin(time * 2.2 + pip.userData.pip.phase) * 0.03);
-                    pip.lookAt(this.camera.position);
-                    pip.children[0].scale.setScalar(1 + (this.reducedMotion ? 0.3 : phase));
-                    pip.children[0].material.opacity = this.reducedMotion ? 0.6 : 0.8 * (1 - phase);
-                }
+                if (!showPips) continue;
+                const hot = spot === this.hovered;
+                const phase = (time * 0.8 + pip.userData.pip.phase) % 1;
+                pip.position.y = pip.userData.pip.baseY + (this.reducedMotion ? 0 : Math.sin(time * 2.2 + pip.userData.pip.phase) * 0.03);
+                pip.scale.setScalar(hot ? 1.5 : 1);
+                // the pip sits inside rotated groups, so face it to the camera in world space
+                pip.quaternion.copy(this.camera.quaternion);
+                pip.children[0].scale.setScalar(1 + (this.reducedMotion ? 0.3 : phase));
+                pip.children[0].material.opacity = this.reducedMotion ? 0.6 : 0.8 * (1 - phase);
             }
         }
 
-        if (!this.reducedMotion) for (const tick of this.tickers) tick?.(time, dt);
+        if (!this.reducedMotion) this.tick?.(time, dt);
 
         this.composer.render(dt);
         this.handlers.onFrame?.();

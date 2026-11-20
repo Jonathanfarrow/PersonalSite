@@ -47,13 +47,8 @@ async function start() {
     ]);
 
     try {
-        const [{ World }, { loadProps }] = await Promise.all([import('./world/World.js'), import('./world/props.js')]);
-        await loadProps();
-        world = new World($('#scene'), {
-            studio: site.studio,
-            games: site.games,
-            office: { about: site.about },
-        }, {
+        const { World } = await import('./world/World.js');
+        world = await World.create($('#scene'), site, {
             onRoom: (id) => { location.hash = `#${id}`; },
             onSpot: (room, spotId) => { location.hash = spotToHash(room, spotId); },
             onRoomHover: (id) => labels.forEach((el, key) => el.classList.toggle('is-hot', key === id)),
