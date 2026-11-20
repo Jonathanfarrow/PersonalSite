@@ -1,20 +1,9 @@
-import { marked } from '/node_modules/marked/lib/marked.esm.js';
+import { marked } from '../vendor/marked.esm.js';
 
 export class MarkdownLoader {
     constructor() {
         this.cache = new Map();
-        // Configure marked options
-        marked.setOptions({
-            highlight: function(code, lang) {
-                // If a language is specified and Prism supports it
-                if (lang && window.Prism.languages[lang]) {
-                    return window.Prism.highlight(code, window.Prism.languages[lang], lang);
-                }
-                return code; // Return raw code if language not supported
-            },
-            breaks: true,
-            gfm: true
-        });
+        marked.setOptions({ breaks: true, gfm: true });
     }
 
     async loadMarkdown(path) {

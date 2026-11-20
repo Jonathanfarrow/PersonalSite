@@ -2,61 +2,76 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Digital thoughts by Jonathan Farrow</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Jonathan Farrow</title>
+    <meta name="description" content="Jonathan Farrow's place on the web: a studio for the music, an office for the work and writing, and a games room for the games in progress.">
+    <meta name="theme-color" content="#0b0e24">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;500;600&family=Fira+Code&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-vscode-dark.min.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
     <link rel="stylesheet" href="src/styles/main.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./src/vendor/three.module.min.js",
+            "three/addons/": "./src/vendor/addons/"
+        }
+    }
+    </script>
 </head>
 <body>
-    <nav>
-        <ul>
-            <li><a href="#home">Home</a></li>
-            <li><a href="#essays">Essays</a></li>
-            <li><a href="#technical">Technical</a></li>
-            <li><a href="#about">About</a></li>
-        </ul>
-    </nav>
+    <header class="topbar">
+        <a class="brand" href="#">Jonathan Farrow</a>
+        <nav class="topnav" aria-label="Rooms">
+            <a href="#studio">Studio</a>
+            <a href="#office">Office</a>
+            <a href="#games">Games</a>
+            <a href="#about">About</a>
+        </nav>
+    </header>
 
-    <div class="hero-container">
-        <div class="watercolor-wrapper">
-            <img src="src/assets/watercolor.png" alt="Watercolor background" class="watercolor-img">
-            <div class="hero-content">
-                <h1>Digital thoughts by Jonathan Farrow</h1>
-                <p class="subtitle">Exploring software, systems, and the ideas that shape them.</p>
-            </div>
-        </div>
-    </div>
+    <main id="stage">
+        <canvas id="scene" aria-hidden="true"></canvas>
 
-    <main class="content">
-        <div class="content-grid">
-            <section class="section" id="latest-essays">
-                <h2> Essays</h2>
-                <div class="articles-container">
-                    <!-- Latest essays will be loaded here -->
-                    <div class="loading">Loading...</div>
-                </div>
-                <a href="#essays" class="view-all">View all essays →</a>
-            </section>
+        <section class="intro" aria-labelledby="intro-name">
+            <p class="eyebrow">Welcome in</p>
+            <h1 id="intro-name">Jonathan Farrow</h1>
+            <p id="intro-tagline" class="tagline">I build software, make music and tinker with games. Pick a floor and have a look around.</p>
+        </section>
 
-            <section class="section" id="latest-technical">
-                <h2> Technical</h2>
-                <div class="articles-container">
-                    <!-- Latest technical articles will be loaded here -->
-                    <div class="loading">Loading...</div>
-                </div>
-                <a href="#technical" class="view-all">View all technical articles →</a>
-            </section>
-        </div>
+        <nav class="room-labels" aria-label="Floors">
+            <a class="room-label" data-room="studio" href="#studio">
+                <span class="room-label-floor">Top floor</span>
+                <span class="room-label-title">The Studio</span>
+            </a>
+            <a class="room-label" data-room="office" href="#office">
+                <span class="room-label-floor">First floor</span>
+                <span class="room-label-title">The Office</span>
+            </a>
+            <a class="room-label" data-room="games" href="#games">
+                <span class="room-label-floor">Ground floor</span>
+                <span class="room-label-title">The Games Room</span>
+            </a>
+        </nav>
 
-        <div id="content">
-            <!-- Dynamic content will be loaded here -->
-        </div>
+        <p class="hint hint-building">Pick a floor to step inside.</p>
+        <p class="hint hint-room">Things with a white dot open something.</p>
+        <a class="back" href="#">← Whole building</a>
+        <div id="tooltip" class="tooltip" hidden></div>
     </main>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+
+    <aside id="panel" class="panel" aria-label="Room contents" inert>
+        <a class="panel-close" href="#" aria-label="Close and go back to the building">×</a>
+        <div class="panel-body"></div>
+    </aside>
+
+    <noscript>
+        <p class="noscript">This site is an interactive building and needs JavaScript. You can still find me on <a href="https://github.com/Jonathanfarrow">GitHub</a>.</p>
+    </noscript>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js" data-manual></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script type="module" src="src/js/app.js"></script>
 </body>
-</html> 
+</html>
