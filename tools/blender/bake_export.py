@@ -61,14 +61,23 @@ def flatten(objs, name):
     j.data.use_auto_smooth = True; j.data.auto_smooth_angle = math.radians(40)
     return j
 
-def tonemap(x):
-    """Scene-linear -> display-linear, close to the Filmic look of the stills."""
-    x = np.maximum(x * (2.0 ** EXPOSURE), 0.0)
-    y = (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)
-    return np.clip(y, 0.0, 1.0)
+# Grade the bake exactly as the stills are graded: Blender's Filmic view transform.
+scene.view_settings.view_transform = 'Filmic'; scene.view_settings.look = 'Medium High Contrast'; scene.view_settings.exposure = EXPOSURE
+scene.render.image_settings.file_format = 'PNG'; scene.render.image_settings.color_mode = 'RGB'
 
-def srgb_encode(y):
-    return np.where(y <= 0.0031308, y * 12.92, 1.055 * np.power(np.maximum(y, 1e-9), 1 / 2.4) - 0.055)
+def filmic_lut(n=2048, top=64.0):
+    """Sample the view transform so vertex colours get the same grade as the texture."""
+    xs = (np.linspace(0, 1, n) ** 3) * top
+    ramp = bpy.data.images.new('lut', n, 1, alpha=False, float_buffer=True)
+    px = np.ones((n, 4), dtype=np.float32); px[:, :3] = xs[:, None]; ramp.pixels.foreach_set(px.ravel())
+    path = os.path.join(OUT, '_lut.png'); ramp.save_render(path, scene=scene)
+    back = bpy.data.images.load(path); out = np.empty(n * 4, dtype=np.float32); back.pixels.foreach_get(out)
+    os.remove(path)
+    return xs, out.reshape(n, 4)[:, 0]          # loaded pixels are display-linear
+
+LUT_X, LUT_Y = filmic_lut()
+def tonemap(x):
+    return np.interp(np.maximum(x, 0.0), LUT_X, LUT_Y).astype(np.float32)
 
 scene.render.engine = 'CYCLES'; scene.cycles.device = 'CPU'; scene.cycles.use_denoising = False
 scene.cycles.sample_clamp_indirect = 3.0; scene.cycles.sample_clamp_direct = 12.0; scene.cycles.max_bounces = 5
@@ -95,12 +104,10 @@ for m in {s.material for s in house.material_slots if s.material}:
 scene.cycles.samples = SAMPLES; bk.target = 'IMAGE_TEXTURES'
 bpy.ops.object.bake(type='COMBINED')
 log('house baked')
-px = np.empty(RES * RES * 4, dtype=np.float32); img.pixels.foreach_get(px)
-rgb = srgb_encode(tonemap(px.reshape(RES, RES, 4)[:, :, :3]))
 import subprocess
-np.save(os.path.join(OUT, 'house_bake.npy'), rgb.astype(np.float32))
-subprocess.run(['python3', os.path.join(HERE, 'encode_bake.py'), os.path.join(OUT, 'house_bake.npy'), os.path.join(OUT, 'house_bake'), arg('--denoise', '3')], check=True)
-os.remove(os.path.join(OUT, 'house_bake.npy'))
+raw = os.path.join(OUT, '_house_raw.png'); img.save_render(raw, scene=scene)
+subprocess.run(['python3', os.path.join(HERE, 'encode_bake.py'), raw, os.path.join(OUT, 'house_bake.webp'), arg('--denoise', '4')], check=True)
+os.remove(raw)
 log('texture saved')
 
 # ---------------------------------------------------------------- outside, trees: vertex colours
@@ -155,6 +162,8 @@ for o in [house, outside] + list(keep.values()): o.select_set(True)
 bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, 'house.glb'), export_format='GLB', use_selection=True, export_apply=True,
                           export_colors=True, export_normals=True, export_image_format='WEBP', export_yup=True, export_lights=False, export_cameras=False)
 json.dump({'instances': instances, 'smoke': [[round(p[0], 3), round(p[2], 3), round(-p[1], 3)] for p in smoke_at]}, open(os.path.join(OUT, 'scene.json'), 'w'))
+for f in ('house_bake.png', 'house_bake.webp'):
+    if os.path.exists(os.path.join(OUT, f)): os.remove(os.path.join(OUT, f))
 log('exported', os.path.getsize(os.path.join(OUT, 'house.glb')) // 1024, 'KB')
 
 # ---------------------------------------------------------------- sky panorama
@@ -166,7 +175,6 @@ except Exception: cam.data.cycles.panorama_type = 'EQUIRECTANGULAR'
 cam.rotation_euler = (math.pi / 2, 0, 0); cam.location = (0, 0, 2)
 scene.use_nodes = False
 scene.cycles.samples = 16; scene.render.resolution_x = 2048; scene.render.resolution_y = 1024
-scene.view_settings.view_transform = 'Filmic'; scene.view_settings.look = 'Medium High Contrast'; scene.view_settings.exposure = EXPOSURE
 scene.render.image_settings.file_format = 'JPEG'; scene.render.image_settings.quality = 90
 scene.render.filepath = os.path.join(OUT, 'sky.jpg'); bpy.ops.render.render(write_still=True)
 log('sky done')

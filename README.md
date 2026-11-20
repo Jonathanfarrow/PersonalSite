@@ -1,6 +1,6 @@
 # PersonalSite
 
-A Victorian terrace you can look around, cut open like a doll's house: a **studio** in the loft for the music, an **office** on the first floor for work and writing, and a **games room** on the ground floor. Static site, no build step.
+A countryside house you can look around, cut open like a doll's house: a **studio** in the loft for the music, an **office** on the first floor for work and writing, and a **games room** on the ground floor. Static site, no build step.
 
 ## Run it
 
@@ -21,9 +21,14 @@ Everything shown in the panels comes from [`content/site.json`](content/site.jso
 
 ## Where things live
 
-- `src/js/world/` — the 3D scene (three.js). One file per room, `building.js` for the shell and street, `World.js` for camera and clicks.
-- `src/js/ui/Panel.js` — the side panel.
-- `src/assets/models/props.glb` — furniture and props modelled in Blender. Rebuild with `blender -b --python tools/blender/build_props.py`.
+- `tools/blender/` — the house is modelled and lit in Blender, by script:
+  - `build_cutaway.py` builds the whole scene (house, rooms, garden, church). Add `-- --render out.png` for a still.
+  - `bake_export.py` bakes the lighting and writes `src/assets/models/house.glb`, `scene.json` and `sky.jpg`. Compress the model afterwards with `npx @gltf-transform/cli meshopt house.glb house.glb`.
+  - `build_props.py` builds the furniture models (`props.glb`) the scene uses.
+- `src/js/world/house.js` — loads the baked model and adds what moves or can be clicked (records, cabinets, live screens, smoke, firelight). Positions here mirror the Blender script.
+- `src/js/world/World.js` — camera, effects and clicks. `src/js/ui/Panel.js` — the side panel.
 - `src/vendor/` — three.js and marked, checked in so the site works on GitHub Pages without a build.
+
+The number of records on the wall (six) and arcade cabinets (three) is fixed in the model; the first tracks and games in `content/site.json` are attached to them.
 
 Add `?quality=high` or `?quality=lite` to the URL to pin the effects level; otherwise it adapts to the device.

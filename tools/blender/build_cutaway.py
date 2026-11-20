@@ -710,17 +710,20 @@ def world():
     sky.sun_intensity = 0.5; sky.sun_size = math.radians(5)
     sky.air_density = 1.8; sky.dust_density = 3.0; sky.ozone_density = 2.5
     # streaks of cloud catching the last light, strongest low in the sky
-    tc = nt.nodes.new('ShaderNodeTexCoord'); mp = nt.nodes.new('ShaderNodeMapping'); mp.inputs['Scale'].default_value = (1.2, 1.2, 7.0)
+    tc = nt.nodes.new('ShaderNodeTexCoord'); mp = nt.nodes.new('ShaderNodeMapping'); mp.inputs['Scale'].default_value = (1.0, 1.0, 5.0)
     noise = nt.nodes.new('ShaderNodeTexNoise'); noise.inputs['Scale'].default_value = 2.2; noise.inputs['Detail'].default_value = 8; noise.inputs['Roughness'].default_value = 0.6
-    ramp = nt.nodes.new('ShaderNodeValToRGB'); ramp.color_ramp.elements[0].position = 0.52; ramp.color_ramp.elements[1].position = 0.74
+    ramp = nt.nodes.new('ShaderNodeValToRGB'); ramp.color_ramp.elements[0].position = 0.48; ramp.color_ramp.elements[1].position = 0.72
     sep = nt.nodes.new('ShaderNodeSeparateXYZ'); band = nt.nodes.new('ShaderNodeMapRange')
-    band.inputs[1].default_value = 0.02; band.inputs[2].default_value = 0.3; band.inputs[3].default_value = 1.0; band.inputs[4].default_value = 0.0
+    band.inputs[1].default_value = 0.0; band.inputs[2].default_value = 0.6; band.inputs[3].default_value = 1.0; band.inputs[4].default_value = 0.0
+    above = nt.nodes.new('ShaderNodeMath'); above.operation = 'GREATER_THAN'; above.inputs[1].default_value = 0.0
+    up = nt.nodes.new('ShaderNodeMath'); up.operation = 'MULTIPLY'
     mul = nt.nodes.new('ShaderNodeMath'); mul.operation = 'MULTIPLY'
     mix = nt.nodes.new('ShaderNodeMix'); mix.data_type = 'RGBA'; mix.inputs[7].default_value = (2.2, 1.25, 0.8, 1)
     nt.links.new(tc.outputs['Generated'], mp.inputs[0]); nt.links.new(mp.outputs[0], noise.inputs['Vector']); nt.links.new(noise.outputs['Fac'], ramp.inputs[0])
     nt.links.new(tc.outputs['Generated'], sep.inputs[0]); nt.links.new(sep.outputs['Z'], band.inputs[0])
     nt.links.new(ramp.outputs[0], mul.inputs[0]); nt.links.new(band.outputs[0], mul.inputs[1])
-    nt.links.new(mul.outputs[0], mix.inputs[0]); nt.links.new(sky.outputs[0], mix.inputs[6])
+    nt.links.new(sep.outputs['Z'], above.inputs[0]); nt.links.new(mul.outputs[0], up.inputs[0]); nt.links.new(above.outputs[0], up.inputs[1])
+    nt.links.new(up.outputs[0], mix.inputs[0]); nt.links.new(sky.outputs[0], mix.inputs[6])
     nt.links.new(mix.outputs[2], bg.inputs[0]); bg.inputs[1].default_value = 0.16
 
 def camera():
